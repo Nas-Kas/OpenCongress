@@ -11,7 +11,9 @@ export default function BillSelector({ onSelect }) {
   const SESSION = 1;
 
   useEffect(() => {
-    fetch(`http://127.0.0.1:8000/house/votes?congress=${CONGRESS}&session=${SESSION}&limit=50`)
+    fetch(
+      `http://127.0.0.1:8000/house/votes?congress=${CONGRESS}&session=${SESSION}&limit=50&include_titles=1&include_questions=1`
+    )
       .then((r) => {
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
         return r.json();
@@ -32,23 +34,33 @@ export default function BillSelector({ onSelect }) {
         if (!e.target.value) return;
         onSelect(JSON.parse(e.target.value));
       }}
-      style={{ minWidth: 680 }}
+      style={{ minWidth: "100%", maxWidth: "100%" }}
     >
       <option value="">Select a House roll-call</option>
       {votes.map((v, i) => {
-        const label = `Roll ${v.roll} — ${v.legislationType} ${v.legislationNumber} — ${v.question} (${v.result ?? "—"})`;
+        const question = (v.question && v.question.trim()) || "(No question)";
+        const billId = `${v.legislationType} ${v.legislationNumber}`;
+        const title = (v.title && v.title.trim()) || billId;
+        const label = `Roll ${v.roll} — ${question} — ${billId} — ${title} (${v.result ?? "—"})`;
+
         const payload = {
           congress: v.congress,
           session: v.session,
           roll: v.roll,
-          question: v.question,
+          question: v.question || null, // pass through for header fallback
+          title: v.title || null,       // pass through for header fallback
           result: v.result,
           legislationType: v.legislationType,
           legislationNumber: v.legislationNumber,
           source: v.source,
         };
+
         return (
-          <option key={`${v.congress}-${v.session}-${v.roll}-${i}`} value={JSON.stringify(payload)} title={label}>
+          <option
+            key={`${v.congress}-${v.session}-${v.roll}-${i}`}
+            value={JSON.stringify(payload)}
+            title={label}
+          >
             {label}
           </option>
         );
