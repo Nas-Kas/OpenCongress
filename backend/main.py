@@ -576,3 +576,61 @@ async def get_member_house_votes(
         "stats": stats,
         "votes": out,
     }
+
+# --- MEMBER SEARCH (DB) ------------------------------------------------------
+
+from fastapi import FastAPI, HTTPException, Query
+import re
+
+@app.get("/search/members")
+async def search_members(
+    q: str = Query(..., min_length=1, description="Name, Bioguide ID, state, party"),
+    limit: int = Query(10, ge=1, le=50)
+):
+    """
+    Simple case-insensitive search over members by name, bioguide_id, state, or party.
+    Returns up to `limit` rows ordered by 'best guess' relevance.
+    """
+    q = q.strip()
+    if not q:
+        return []
+
+    # Prevent wildcard-injection from user input
+    safe = re.sub(r"[%_]", " ", q)
+    pattern = f"%{safe}%"
+
+    pool: asyncpg.Pool = app.state.pool
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT bioguide_id,
+                   COALESCE(name, bioguide_id) AS name,
+                   party,
+                   state,
+                   image_url
+            FROM members
+            WHERE (name ILIKE $1 OR bioguide_id ILIKE $1 OR state ILIKE $1 OR party ILIKE $1)
+            ORDER BY
+              -- a light relevance boost: exact bioguide match first, then prefix name match, then name ASC
+              (CASE WHEN bioguide_id ILIKE $2 THEN 0
+                    WHEN name ILIKE $3 THEN 1
+                    ELSE 2 END),
+              name ASC
+            LIMIT $4
+            """,
+            pattern,
+            safe,            # $2: exact-ish bioguide match
+            f"{safe}%",      # $3: name prefix
+            limit
+        )
+
+    return [
+        {
+            "bioguideId": r["bioguide_id"],
+            "name": r["name"],
+            "party": r["party"],
+            "state": r["state"],
+            "imageUrl": r["image_url"],
+        }
+        for r in rows
+    ]
