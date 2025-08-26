@@ -2,18 +2,15 @@ import { useMemo, useState } from "react";
 
 const VOTE_RANK = { Yea: 3, Nay: 2, Present: 1, "Not Voting": 0 };
 
-// Renders flattened member ballots for a House roll call with sortable columns.
-export default function VotesTable({ rows }) {
+export default function VotesTable({ rows = [], onOpenMember }) {
   const [sortKey, setSortKey] = useState("name"); // "name" | "party" | "state" | "position"
   const [sortDir, setSortDir] = useState("asc");  // "asc" | "desc"
 
   const sortedRows = useMemo(() => {
     const keyed = rows.map((r, i) => ({ r, i }));
-
     const cmp = (a, b) => {
       const va = a.r[sortKey] ?? "";
       const vb = b.r[sortKey] ?? "";
-
       let diff = 0;
 
       if (sortKey === "position") {
@@ -23,17 +20,14 @@ export default function VotesTable({ rows }) {
       } else {
         const sa = String(va).toLowerCase();
         const sb = String(vb).toLowerCase();
-        if (sa < sb) diff = -1;
-        else if (sa > sb) diff = 1;
-        else diff = 0;
+        diff = sa < sb ? -1 : sa > sb ? 1 : 0;
       }
 
-      if (diff === 0) return a.i - b.i;         // stable
-      return sortDir === "asc" ? diff : -diff;  // direction
+      if (diff === 0) return a.i - b.i;             // stable
+      return sortDir === "asc" ? diff : -diff;      // direction
     };
-
     return keyed.sort(cmp).map(k => k.r);
-  }, [rows, sortKey, sortDir]); // ← no warning now
+  }, [rows, sortKey, sortDir]);
 
   const setSort = (key) => {
     if (key === sortKey) setSortDir(d => (d === "asc" ? "desc" : "asc"));
@@ -60,6 +54,12 @@ export default function VotesTable({ rows }) {
         {pos}
       </span>
     );
+  };
+
+  const handleOpenMember = (bioguideId) => {
+    if (typeof onOpenMember === "function" && bioguideId) {
+      onOpenMember(bioguideId);
+    }
   };
 
   return (
@@ -91,7 +91,25 @@ export default function VotesTable({ rows }) {
       <tbody>
         {sortedRows.map((m) => (
           <tr key={m.bioguideId ?? `${m.name}-${m.state}-${m.party}`}>
-            <td>{m.name}</td>
+            <td>
+              <button
+                type="button"
+                onClick={() => handleOpenMember(m.bioguideId)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  margin: 0,
+                  color: "#1d4ed8",
+                  textDecoration: "underline",
+                  cursor: "pointer",
+                  font: "inherit",
+                }}
+                aria-label={`Open profile for ${m.name}`}
+              >
+                {m.name}
+              </button>
+            </td>
             <td>{m.party}</td>
             <td>{m.state}</td>
             <td>{badge(m.position)}</td>

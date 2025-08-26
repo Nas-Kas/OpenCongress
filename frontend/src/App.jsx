@@ -1,16 +1,22 @@
 import { useEffect, useState } from "react";
 import BillSelector from "./BillSelector";
 import VotesTable from "./VotesTable";
+import MemberPage from "./MemberPage";
 
 export default function App() {
+  // Main view state
   const [selectedVote, setSelectedVote] = useState(null); // { congress, session, roll, ... }
-  const [rows, setRows] = useState([]);
-  const [meta, setMeta] = useState(null);
-  const [counts, setCounts] = useState(null);
-  const [bill, setBill] = useState(null);
+  const [rows, setRows] = useState([]);                   // flattened ballots for the selected vote
+  const [meta, setMeta] = useState(null);                 // vote metadata (question/result/links)
+  const [counts, setCounts] = useState(null);             // Yea/Nay/Present/Not Voting totals
+  const [bill, setBill] = useState(null);                 // minimal bill info (optional)
   const [error, setError] = useState(null);
   const [loadingVotes, setLoadingVotes] = useState(false);
 
+  // Member detail view state
+  const [selectedMember, setSelectedMember] = useState(null); // bioguideId or null
+
+  // When a vote is selected, fetch its details
   useEffect(() => {
     if (!selectedVote) return;
     const { congress, session, roll } = selectedVote;
@@ -34,6 +40,22 @@ export default function App() {
       .finally(() => setLoadingVotes(false));
   }, [selectedVote]);
 
+  // If user opened a member profile, render that page instead of the vote table
+  if (selectedMember) {
+    return (
+      <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
+        <button
+          type="button"
+          onClick={() => setSelectedMember(null)}
+          style={{ marginBottom: 12 }}
+        >
+          ← Back to vote
+        </button>
+        <MemberPage bioguideId={selectedMember} congress={119} session={1} />
+      </div>
+    );
+  }
+
   const displayQuestion =
     (meta?.question && meta.question.trim()) ||
     (selectedVote?.question && selectedVote.question.trim()) ||
@@ -46,7 +68,7 @@ export default function App() {
     billId;
 
   return (
-    <div style={{ padding: 16, maxWidth: 1000 }}>
+    <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
       <h1>House Roll-Call Votes</h1>
 
       <BillSelector onSelect={setSelectedVote} />
@@ -86,56 +108,16 @@ export default function App() {
             </div>
           )}
 
-          {bill && (
-            <div
-              style={{
-                padding: 12,
-                border: "1px solid #eee",
-                borderRadius: 8,
-                background: "#fafafa",
-                marginBottom: 12,
-              }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 6 }}>
-                {bill.title || `${bill.billType?.toUpperCase()} ${bill.billNumber}`}
-              </div>
-              {bill.latestAction?.text && (
-                <div style={{ fontSize: 13, color: "#444", marginBottom: 6 }}>
-                  Latest action: {bill.latestAction.actionDate} — {bill.latestAction.text}
-                </div>
-              )}
-              {bill.latestSummary?.text && (
-                <details style={{ fontSize: 13 }}>
-                  <summary>Bill summary</summary>
-                  <div style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>
-                    {bill.latestSummary.text}
-                  </div>
-                </details>
-              )}
-              {bill.textVersions?.length > 0 && (
-                <div style={{ marginTop: 6, fontSize: 13 }}>
-                  Text versions:&nbsp;
-                  {bill.textVersions
-                    .filter((v) => v.url)
-                    .map((v, i) => (
-                      <span key={i} style={{ marginRight: 8 }}>
-                        <a href={v.url} target="_blank" rel="noreferrer">
-                          {v.type}
-                        </a>
-                      </span>
-                    ))}
-                </div>
-              )}
-            </div>
-          )}
-
           {counts && (
             <div style={{ marginBottom: 8, fontSize: 13, color: "#444" }}>
               Yea: {counts.yea} · Nay: {counts.nay} · Present: {counts.present} · Not Voting: {counts.notVoting}
             </div>
           )}
 
-          <VotesTable rows={rows} />
+          <VotesTable
+            rows={rows}
+            onOpenMember={(bioguideId) => bioguideId && setSelectedMember(bioguideId)}
+          />
         </div>
       )}
     </div>

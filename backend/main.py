@@ -9,9 +9,10 @@ load_dotenv()
 
 app = FastAPI()
 
+# Allow both localhost + 127.0.0.1 in dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -346,4 +347,173 @@ async def house_vote_detail(
         "counts": counts,
         "votes": rows,
         "bill": bill_payload,
+    }
+
+
+# --- MEMBER DETAIL -----------------------------------------------------------
+@app.get("/member/{bioguideId}")
+async def get_member_detail(bioguideId: str):
+    """
+    Basic member profile from Congress.gov, with a friendly shape.
+    """
+    if not API_KEY:
+        raise HTTPException(500, "Missing Congress API key")
+
+    url = f"{BASE_URL}/member/{bioguideId}"
+    params = {"api_key": API_KEY}
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+        r = await client.get(url, params=params)
+        if r.status_code == 404:
+            raise HTTPException(404, "Member not found")
+        r.raise_for_status()
+        data = r.json()
+
+    m = (data.get("member") or data.get("data", {}).get("member")) or {}
+    # Normalize a little
+    name = m.get("name") or f"{m.get('firstName','')} {m.get('lastName','')}".strip()
+    party = m.get("partyName") or m.get("party")
+    state = m.get("state")
+    depiction = (m.get("depiction") or {}) if isinstance(m.get("depiction"), dict) else {}
+    imageUrl = depiction.get("imageUrl")
+
+    return {
+        "bioguideId": bioguideId.upper(),
+        "name": name,
+        "party": party,
+        "state": state,
+        "imageUrl": imageUrl,
+        "raw": m,  # keep for future use if you want more fields
+    }
+
+
+# --- MEMBER HOUSE VOTES (AGGREGATED) ----------------------------------------
+@app.get("/member/{bioguideId}/house-votes")
+async def get_member_house_votes(
+    bioguideId: str,
+    congress: int = Query(..., description="e.g., 119 or 118"),
+    session: int = Query(1, description="1 or 2"),
+    window: int = Query(150, ge=1, le=500, description="how many recent roll calls to scan"),
+    offset: int = 0,
+):
+    """
+    Scan recent House roll calls and collect this member's ballots.
+    Parallelized with bounded concurrency, resilient to slow/404 rolls,
+    and enriched with vote questions + bill titles.
+    """
+    if not API_KEY:
+        raise HTTPException(500, "Missing Congress API key")
+
+    bioguideId = bioguideId.upper()
+
+    # 1) list a window of recent votes
+    list_url = f"{BASE_URL}/house-vote/{congress}/{session}"
+    params = {"api_key": API_KEY, "limit": window, "offset": offset}
+    async with httpx.AsyncClient(timeout=25, follow_redirects=True) as client:
+        lr = await client.get(list_url, params=params)
+        lr.raise_for_status()
+        ldata = lr.json()
+
+    roll_blocks = (ldata.get("houseRollCallVotes") or [])[:window]
+
+    # Quick exit if nothing to do
+    if not roll_blocks:
+        profile = await get_member_detail(bioguideId)
+        return {
+            "profile": profile,
+            "congress": congress,
+            "session": session,
+            "window": window,
+            "stats": {"total": 0, "yea": 0, "nay": 0, "present": 0, "notVoting": 0},
+            "votes": [],
+        }
+
+    # 2) fetch member votes in parallel with bounded concurrency
+    sem = asyncio.Semaphore(8)   # tune: 6–10 is usually safe
+    timeout = httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=10.0)
+
+    async def fetch_roll_for_member(rb: dict):
+        roll = rb.get("rollCallNumber")
+        if roll is None:
+            return None
+
+        bill_type = rb.get("legislationType")
+        bill_number = rb.get("legislationNumber")
+
+        members_url = f"{BASE_URL}/house-vote/{congress}/{session}/{roll}/members"
+
+        async with sem:
+            try:
+                async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                    r = await client.get(members_url, params={"api_key": API_KEY})
+                    if r.status_code == 404:
+                        return None
+                    r.raise_for_status()
+                    mdata = r.json()
+            except (httpx.HTTPError, Exception):
+                # skip any problematic roll instead of failing the whole request
+                return None
+
+        block = _pick_vote_block(mdata)
+        if not block:
+            return None
+
+        # Question is reliable from the members endpoint
+        question = block.get("voteQuestion")
+
+        # find this member’s row
+        member_row = None
+        for row in (block.get("results") or []):
+            if (row.get("bioguideID") or "").upper() == bioguideId:
+                member_row = row
+                break
+        if not member_row:
+            return None
+
+        # Best-effort: fetch bill title
+        title = None
+        if bill_type and bill_number:
+            bill_url = f"{BASE_URL}/bill/{congress}/{str(bill_type).lower()}/{bill_number}"
+            try:
+                async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                    br = await client.get(bill_url, params={"api_key": API_KEY})
+                    if br.status_code == 200:
+                        title = (br.json().get("bill") or {}).get("title")
+            except Exception:
+                title = None
+
+        return {
+            "roll": roll,
+            "legislationType": bill_type,
+            "legislationNumber": bill_number,
+            "title": title,                 
+            "question": question,          
+            "result": rb.get("result"),
+            "started": rb.get("startDate"),
+            "position": _normalize_position(member_row.get("voteCast")),
+            "partyAtVote": member_row.get("voteParty"),
+            "stateAtVote": member_row.get("voteState"),
+            "legislationUrl": block.get("legislationUrl"),
+        }
+
+    votes = [v for v in await asyncio.gather(*(fetch_roll_for_member(rb) for rb in roll_blocks)) if v]
+
+    # 3) stats from normalized positions
+    stats = {
+        "total": len(votes),
+        "yea": sum(1 for v in votes if v["position"] == "Yea"),
+        "nay": sum(1 for v in votes if v["position"] == "Nay"),
+        "present": sum(1 for v in votes if v["position"] == "Present"),
+        "notVoting": sum(1 for v in votes if v["position"] == "Not Voting"),
+    }
+
+    # 4) add tiny profile header
+    profile = await get_member_detail(bioguideId)
+
+    return {
+        "profile": profile,
+        "congress": congress,
+        "session": session,
+        "window": window,
+        "stats": stats,
+        "votes": votes,
     }
