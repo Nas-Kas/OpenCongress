@@ -41,7 +41,7 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1 }) 
     return () => ctrl.abort();
   }, [bioguideId, congress, session]);
 
-  const votes = data?.votes || [];
+  const votes = useMemo(() => data?.votes ?? [], [data]);
 
   const uniqueTypes = useMemo(() => {
     const s = new Set();
@@ -60,9 +60,7 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1 }) 
       );
     }
     if (fPos !== "all") list = list.filter((v) => v.position === fPos);
-    if (fRes !== "all") {
-      list = list.filter((v) => classifyResult(v.result) === fRes);
-    }
+    if (fRes !== "all") list = list.filter((v) => classifyResult(v.result) === fRes);
     if (fType !== "all") list = list.filter((v) => (v.legislationType || "") === fType);
     if (from) list = list.filter((v) => (v.started || "").slice(0, 10) >= from);
     if (to) list = list.filter((v) => (v.started || "").slice(0, 10) <= to);
@@ -83,7 +81,6 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1 }) 
       const cls = classifyResult(v.result);
       if (cls === "passed" && v.position === "Yea") aligned++;
       else if (cls === "failed" && v.position === "Nay") aligned++;
-      // "other" ignored for alignment
     }
     const alignPct = contested.length ? Math.round((aligned / contested.length) * 100) : null;
     const attendance = total ? Math.round(((total - notv) / total) * 100) : null;

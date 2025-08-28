@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import BillSelector from "./BillSelector";
+import VotePicker from "./VotePicker";
 import VotesTable from "./VotesTable";
 import MemberPage from "./MemberPage";
 import MemberSearch from "./MemberSearch";
@@ -182,13 +182,13 @@ export default function App() {
 
       {/* Roll select and member search */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center" }}>
-        <BillSelector
-          onSelect={(payload) => {
-            setSelectedVote(payload);
-            setSelectedMember(null);
-            setSelectedBill(null);
-          }}
-        />
+      <VotePicker
+        onSelect={(payload) => {
+          setSelectedVote(payload);
+          setSelectedMember(null);
+          setSelectedBill(null);
+        }}
+      />
         <MemberSearch onSelect={(id) => id && setSelectedMember(id.toUpperCase())} />
       </div>
 
