@@ -5,17 +5,44 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Summaries
+  const [summaries, setSummaries] = useState([]);
+  const [sumErr, setSumErr] = useState(null);
+  const [sumLoading, setSumLoading] = useState(true);
+
+  // ---- fetch bill details + vote timeline ----
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
     setErr(null);
     setData(null);
 
-    fetch(`http://127.0.0.1:8000/bill/${congress}/${billType.toLowerCase()}/${billNumber}`, { signal: ctrl.signal })
+    fetch(
+      `http://127.0.0.1:8000/bill/${congress}/${String(billType).toLowerCase()}/${billNumber}`,
+      { signal: ctrl.signal }
+    )
       .then((r) => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); })
       .then(setData)
       .catch((e) => { if (e.name !== "AbortError") setErr(String(e)); })
       .finally(() => setLoading(false));
+
+    return () => ctrl.abort();
+  }, [congress, billType, billNumber]);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    setSumLoading(true);
+    setSumErr(null);
+    setSummaries([]);
+
+    fetch(
+      `http://127.0.0.1:8000/bill/${congress}/${String(billType).toLowerCase()}/${billNumber}/summaries`,
+      { signal: ctrl.signal }
+    )
+      .then((r) => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); })
+      .then((payload) => setSummaries(payload?.summaries || []))
+      .catch((e) => { if (e.name !== "AbortError") setSumErr(String(e)); })
+      .finally(() => setSumLoading(false));
 
     return () => ctrl.abort();
   }, [congress, billType, billNumber]);
@@ -27,15 +54,13 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
     return arr;
   }, [votes]);
 
-  if (loading) return <p>Loading bill…</p>;
-  if (err) return <p style={{ color: "red" }}>Error: {err}</p>;
-  if (!data) return <p>No data.</p>;
+  const latestSummary = useMemo(() => {
+    if (!summaries || summaries.length === 0) return null;
+    const sorted = [...summaries].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    return sorted[0];
+  }, [summaries]);
 
-  const { bill } = data;
-
-  const id = `${bill.billType?.toUpperCase()} ${bill.billNumber}`;
-  const title = bill.title || id;
-
+  // ---- small UI helpers ----
   const resultBadge = (result) => {
     const s = (result || "").toLowerCase();
     const passed = s.includes("pass") || s.includes("agreed");
@@ -57,13 +82,23 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
     </div>
   );
 
+  if (loading) return <p>Loading bill…</p>;
+  if (err) return <p style={{ color: "red" }}>Error: {err}</p>;
+  if (!data) return <p>No data.</p>;
+
+  const { bill } = data;
+  const id = `${bill.billType?.toUpperCase()} ${bill.billNumber}`;
+  const title = bill.title || id;
+
   return (
     <div style={{ padding: 4 }}>
+      {/* Header */}
       <div style={{ marginBottom: 12, display: "flex", gap: 8, alignItems: "center" }}>
         {onBack && <button onClick={onBack}>← Back</button>}
         <h2 style={{ margin: 0 }}>{title}</h2>
       </div>
 
+      {/* Meta line */}
       <div style={{ fontSize: 14, color: "#444", marginBottom: 8 }}>
         <strong>{id}</strong>
         {" · "}Introduced: {bill.introducedDate?.slice(0, 10) || "—"}
@@ -75,6 +110,7 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
         )}
       </div>
 
+      {/* Latest action */}
       {bill.latestAction && (
         <div style={{ fontSize: 13, marginBottom: 10 }}>
           Latest action: <em>{bill.latestAction?.text || bill.latestAction}</em>
@@ -82,6 +118,7 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
         </div>
       )}
 
+      {/* Text versions */}
       {bill.textVersions && bill.textVersions.length > 0 && (
         <div style={{ fontSize: 13, marginBottom: 12 }}>
           Text versions:&nbsp;
@@ -94,8 +131,58 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
         </div>
       )}
 
-      <h3 style={{ marginTop: 16, marginBottom: 8 }}>House Roll-Call Timeline</h3>
+      {/* --- Summary section (styled) --- */}
+      <h3 style={{ marginTop: 16, marginBottom: 8 }}>Summary</h3>
+      {sumLoading ? (
+        <p>Loading summary…</p>
+      ) : sumErr ? (
+        <p style={{ color: "red" }}>Error loading summaries: {sumErr}</p>
+      ) : !latestSummary ? (
+        <p>No summary available.</p>
+      ) : (
+        <>
+          <div
+            style={{
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              padding: 12,
+              background: "#fafafa"
+            }}
+          >
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+              <Pill color="#eef2ff">{latestSummary.source || "CRS"}</Pill>
+              {latestSummary.date && <Pill>{latestSummary.date}</Pill>}
+            </div>
+            <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>
+              {latestSummary.text}
+            </div>
+          </div>
 
+          {summaries.length > 1 && (
+            <details style={{ marginTop: 10 }}>
+              <summary style={{ cursor: "pointer" }}>
+                View all summaries ({summaries.length})
+              </summary>
+              <div style={{ marginTop: 8 }}>
+                {[...summaries]
+                  .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+                  .map((s, i) => (
+                    <div key={`${s.date}-${i}`} style={{ marginBottom: 12 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                        <Pill color="#eef2ff">{s.source || "CRS"}</Pill>
+                        {s.date && <Pill>{s.date}</Pill>}
+                      </div>
+                      <div style={{ whiteSpace: "pre-wrap" }}>{s.text}</div>
+                    </div>
+                  ))}
+              </div>
+            </details>
+          )}
+        </>
+      )}
+
+      {/* --- Timeline (styled like your member page) --- */}
+      <h3 style={{ marginTop: 16, marginBottom: 8 }}>House Roll-Call Timeline</h3>
       {orderedVotes.length === 0 ? (
         <p>No recorded House votes for this bill (in DB).</p>
       ) : (

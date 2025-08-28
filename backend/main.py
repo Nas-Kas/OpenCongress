@@ -1,10 +1,9 @@
-# backend/main.py
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from datetime import date, datetime
-import os, asyncpg, httpx, asyncio
-
+import re, os, httpx, asyncio
+import asyncpg
 from dotenv import load_dotenv
 from typing import Optional
 
@@ -750,3 +749,37 @@ async def get_bill_view(
         },
         "votes": votes,
     }
+
+def _strip_html(s: str | None) -> str:
+    if not s:
+        return ""
+    s = re.sub(r"<[^>]+>", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+@app.get("/bill/{congress}/{bill_type}/{bill_number}/summaries")
+async def bill_summaries(congress: int, bill_type: str, bill_number: str):
+    if not API_KEY:
+        raise HTTPException(500, "Missing CONGRESS_API_KEY")
+
+    bill_type = bill_type.lower()
+    url = f"{BASE_URL}/bill/{congress}/{bill_type}/{bill_number}/summaries"
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+            resp = await client.get(url, params={"api_key": API_KEY})
+            resp.raise_for_status()
+            raw = resp.json() or {}
+    except httpx.HTTPStatusError as e:
+        # surface real API problems (bad bill ids, etc.)
+        raise HTTPException(e.response.status_code, f"Congress API error: {e}") from e
+    except Exception as e:
+        raise HTTPException(500, f"Failed to fetch summaries: {e}") from e
+
+    out = []
+    for s in raw.get("summaries") or []:
+        out.append({
+            "date": s.get("dateIssued") or s.get("actionDate") or (s.get("updateDate") or "")[:10],
+            "source": s.get("source") or s.get("actionDesc") or "CRS",
+            "text": _strip_html(s.get("text") or s.get("summary")),
+        })
+    return {"summaries": out}
