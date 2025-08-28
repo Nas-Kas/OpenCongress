@@ -634,3 +634,119 @@ async def search_members(
         }
         for r in rows
     ]
+
+@app.get("/bill/{congress}/{bill_type}/{bill_number}")
+async def get_bill_view(
+    congress: int,
+    bill_type: str,
+    bill_number: str,
+):
+    """
+    Returns bill header (from DB or API fallback) plus all House roll calls
+    for that bill, ordered chronologically.
+    """
+    bt = bill_type.lower()
+    pool: asyncpg.Pool = app.state.pool
+
+    async with pool.acquire() as conn:
+        bill_row = await conn.fetchrow(
+            """
+            SELECT congress, bill_type, bill_number, title, introduced_date, latest_action, public_url
+            FROM bills
+            WHERE congress=$1 AND bill_type=$2 AND bill_number=$3
+            """,
+            congress, bt, bill_number
+        )
+        tv_rows = await conn.fetch(
+            """
+            SELECT version_type, url
+            FROM bill_text_versions
+            WHERE congress=$1 AND bill_type=$2 AND bill_number=$3
+            ORDER BY version_type
+            """,
+            congress, bt, bill_number
+        )
+        vote_rows = await conn.fetch(
+            """
+            SELECT session, roll, question, result, started,
+                   yea_count, nay_count, present_count, not_voting_count,
+                   legislation_url
+            FROM house_votes
+            WHERE congress=$1
+              AND legislation_type ILIKE $2
+              AND legislation_number=$3
+            ORDER BY started ASC NULLS LAST, roll ASC
+            """,
+            congress, bill_type, bill_number
+        )
+
+    # Bill header (DB first, then API fallback)
+    title = introduced = latest_action = public_url = None
+    text_versions = [{"type": r["version_type"], "url": r["url"]} for r in tv_rows]
+
+    if bill_row:
+        title = bill_row["title"]
+        introduced = bill_row["introduced_date"]
+        latest_action = bill_row["latest_action"]
+        public_url = bill_row["public_url"]
+    elif API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                base = f"{BASE_URL}/bill/{congress}/{bt}/{bill_number}"
+                br = await client.get(base, params={"api_key": API_KEY})
+                br.raise_for_status()
+                b = (br.json().get("bill") or {})
+                title = b.get("title")
+                introduced = b.get("introducedDate")
+                latest_action = b.get("latestAction")
+                public_url = b.get("govtrackURL") or b.get("url")
+
+                try:
+                    tr = await client.get(f"{base}/text", params={"api_key": API_KEY})
+                    if tr.status_code == 200:
+                        tvs = (tr.json().get("textVersions") or [])
+                        text_versions = []
+                        for tv in tvs:
+                            url = None
+                            for f in (tv.get("formats") or []):
+                                if f.get("type") in ("PDF", "HTML") and f.get("url"):
+                                    url = f["url"]; break
+                            if tv.get("type") and url:
+                                text_versions.append({"type": tv["type"], "url": url})
+                except Exception:
+                    pass
+        except Exception:
+            pass  # keep bill header as None if API falls over
+
+    votes = []
+    for v in vote_rows:
+        yea = v["yea_count"] or 0
+        nay = v["nay_count"] or 0
+        present = v["present_count"] or 0
+        nv = v["not_voting_count"] or 0
+        votes.append({
+            "session": v["session"],
+            "roll": v["roll"],
+            "question": v["question"],
+            "result": v["result"],
+            "started": _iso(v["started"]),
+            "counts": {
+                "yea": yea, "nay": nay, "present": present, "notVoting": nv,
+                "total": yea + nay + present + nv
+            },
+            "legislationUrl": v["legislation_url"],
+        })
+
+    return {
+        "bill": {
+            "congress": congress,
+            "billType": bt,
+            "billNumber": str(bill_number),
+            "title": title,
+            "introducedDate": _iso(introduced),
+            "latestAction": latest_action,
+            "publicUrl": public_url,
+            "textVersions": text_versions,
+        },
+        "votes": votes,
+    }
