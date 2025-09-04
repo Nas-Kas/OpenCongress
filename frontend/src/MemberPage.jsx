@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useLayoutEffect, useRef } from "react";
 
 // classify result strings so we can filter / analyze
 function classifyResult(result) {
@@ -21,6 +21,93 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1 }) 
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+  const filtersRef = useRef(null);
+  const scrollRef = useRef(null); 
+  const tableRef = useRef(null);
+  const theadRef = useRef(null);
+
+  const [stickyTop, setStickyTop] = useState(0);
+  const [gridTemplate, setGridTemplate] = useState(""); // CSS grid template columns for overlay
+  const [overlayWidth, setOverlayWidth] = useState(0);  // px; keeps overlay width in sync
+
+  // Measure filter bar height live (so header sits just below it)
+  useLayoutEffect(() => {
+    let raf = 0;
+    const calcTop = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = filtersRef.current;
+        if (!el) return;
+        const styles = getComputedStyle(el);
+        const mb = parseFloat(styles.marginBottom) || 0;
+        setStickyTop(el.getBoundingClientRect().height + mb + 1); // +1 buffer
+      });
+    };
+    const ro = "ResizeObserver" in window ? new ResizeObserver(calcTop) : null;
+    if (ro && filtersRef.current) ro.observe(filtersRef.current);
+
+    calcTop();
+    window.addEventListener("resize", calcTop);
+    window.addEventListener("orientationchange", calcTop);
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener("resize", calcTop);
+      window.removeEventListener("orientationchange", calcTop);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  // Measure table header column widths and total width for the overlay header
+  useLayoutEffect(() => {
+    if (!data) return;
+
+    let raf = 0;
+    const measure = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const thead = theadRef.current;
+        const table = tableRef.current;
+        if (!thead || !table) return;
+
+        const ths = Array.from(thead.querySelectorAll("th"));
+        if (!ths.length) return;
+
+        const widths = ths.map((th) => Math.ceil(th.getBoundingClientRect().width));
+        const template = widths.map((w) => `${w}px`).join(" ");
+        setGridTemplate(template);
+        setOverlayWidth(Math.ceil(table.getBoundingClientRect().width));
+      });
+    };
+
+    // Run after first paint
+    measure();
+
+    // Watch table/thead for size changes (fonts, scrollbars, content wrap)
+    const roOK = "ResizeObserver" in window;
+    const roTable = roOK ? new ResizeObserver(measure) : null;
+    const roHead  = roOK ? new ResizeObserver(measure) : null;
+    if (roTable && tableRef.current) roTable.observe(tableRef.current);
+    if (roHead && theadRef.current) roHead.observe(theadRef.current);
+
+    // Also on window resizes and horizontal scroll wrapper resizes
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+
+    // If the browser supports font loading events, remeasure on ready
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(measure).catch(() => {});
+    }
+
+    return () => {
+      if (roTable) roTable.disconnect();
+      if (roHead) roHead.disconnect();
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+      cancelAnimationFrame(raf);
+    };
+  }, [data]);
+
+  // Fetch data
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
@@ -33,9 +120,7 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1 }) 
     )
       .then((r) => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); })
       .then(setData)
-      .catch((e) => {
-        if (e.name !== "AbortError") setErr(String(e));
-      })
+      .catch((e) => { if (e.name !== "AbortError") setErr(String(e)); })
       .finally(() => setLoading(false));
 
     return () => ctrl.abort();
@@ -97,6 +182,8 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1 }) 
 
   const { profile, stats } = data;
 
+  const headerLabels = ["Roll", "Bill", "Question", "Chamber Result", "Member Vote", "Date"];
+
   return (
     <div style={{ padding: 4 }}>
       {/* Header */}
@@ -141,11 +228,16 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1 }) 
         </div>
       </header>
 
-      {/* Filters */}
       <div
+        ref={filtersRef}
         style={{
-          position: "sticky", top: 0, zIndex: 1,
-          background: "white", padding: "8px 0", borderBottom: "1px solid #eee", marginBottom: 8
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+          background: "white",
+          padding: "8px 0",
+          borderBottom: "1px solid #eee",
+          marginBottom: 8
         }}
       >
         <div style={{ display: "grid", gridTemplateColumns: "1.2fr .8fr .8fr .8fr .8fr .8fr", gap: 8, alignItems: "center" }}>
@@ -191,16 +283,46 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1 }) 
       {filtered.length === 0 ? (
         <p>No votes match your filters.</p>
       ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table cellPadding={6} style={{ borderCollapse: 'collapse', width: '100%' }}>
-            <thead style={{ position: "sticky", top: 76, background: "white", zIndex: 1 }}>
+        <div ref={scrollRef} style={{ overflowX: "auto", position: "relative" }}>
+          <div
+            style={{
+              position: "sticky",
+              top: stickyTop,
+              zIndex: 8, // below filters (10) / above body
+              background: "white",
+              boxShadow: "0 1px 0 #eee",
+              // keep width in sync with table width so horizontal scroll aligns
+              width: overlayWidth ? `${overlayWidth}px` : "100%",
+              pointerEvents: "none", // let clicks go through to the table links
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: gridTemplate || "80px 1.5fr 2fr 1fr 1fr 120px",
+                gap: 0,
+                fontWeight: 700,
+                padding: "6px 8px",
+              }}
+            >
+            </div>
+          </div>
+
+          {/* The real table (non-sticky header kept for semantics & measuring) */}
+          <table
+            ref={tableRef}
+            cellPadding={6}
+            style={{
+              borderCollapse: "separate",
+              borderSpacing: 0,
+              width: "100%"
+            }}
+          >
+            <thead ref={theadRef}>
               <tr>
-                <th align="left">Roll</th>
-                <th align="left">Bill</th>
-                <th align="left">Question</th>
-                <th align="left">Chamber Result</th>
-                <th align="left">Member Vote</th>
-                <th align="left">Date</th>
+                {headerLabels.map((h) => (
+                  <th key={h} align="left" style={{ fontWeight: 700 }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
