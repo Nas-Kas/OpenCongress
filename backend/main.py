@@ -1,11 +1,14 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 import re, os, httpx, asyncio
 import asyncpg
 from dotenv import load_dotenv
 from typing import Optional
+from pydantic import BaseModel
+from decimal import Decimal
+from bill_text_scraper import BillTextScraper
 
 load_dotenv()
 
@@ -634,6 +637,92 @@ async def search_members(
         for r in rows
     ]
 
+@app.get("/bills/no-votes")
+async def get_bills_without_votes(
+    congress: int = Query(119, description="Congress number"),
+    limit: int = Query(50, description="Number of bills to return"),
+    offset: int = Query(0, description="Offset for pagination"),
+    bill_type: Optional[str] = Query(None, description="Filter by bill type (hr, s, etc.)")
+):
+    """
+    Get bills that haven't had House votes yet - perfect for early-stage betting markets.
+    """
+    async with app.state.pool.acquire() as conn:
+        # Build the query with optional bill_type filter
+        where_clause = "WHERE hv.congress IS NULL AND b.congress = $1"
+        params = [congress]
+        
+        if bill_type:
+            where_clause += " AND b.bill_type = $" + str(len(params) + 1)
+            params.append(bill_type.lower())
+        
+        query = f"""
+            SELECT 
+                b.congress,
+                b.bill_type,
+                b.bill_number,
+                b.title,
+                b.introduced_date,
+                b.latest_action,
+                b.public_url,
+                b.updated_at
+            FROM bills b
+            LEFT JOIN house_votes hv ON (
+                hv.congress = b.congress 
+                AND LOWER(hv.legislation_type) = b.bill_type 
+                AND hv.legislation_number = b.bill_number
+            )
+            {where_clause}
+            ORDER BY b.updated_at DESC
+            LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
+        """
+        params.extend([limit, offset])
+        
+        rows = await conn.fetch(query, *params)
+        
+        # Get total count for pagination
+        count_query = f"""
+            SELECT COUNT(*)
+            FROM bills b
+            LEFT JOIN house_votes hv ON (
+                hv.congress = b.congress 
+                AND LOWER(hv.legislation_type) = b.bill_type 
+                AND hv.legislation_number = b.bill_number
+            )
+            {where_clause.replace(f'LIMIT ${len(params) - 1} OFFSET ${len(params)}', '')}
+        """
+        total_count = await conn.fetchval(count_query, *params[:-2])
+        
+        bills = []
+        for r in rows:
+            # Parse latest_action JSON if it exists
+            latest_action = r["latest_action"]
+            if isinstance(latest_action, str):
+                try:
+                    import json
+                    latest_action = json.loads(latest_action)
+                except:
+                    pass
+            
+            bills.append({
+                "congress": r["congress"],
+                "billType": r["bill_type"],
+                "billNumber": r["bill_number"],
+                "title": r["title"],
+                "introducedDate": r["introduced_date"].isoformat() if r["introduced_date"] else None,
+                "latestAction": latest_action,
+                "publicUrl": r["public_url"],
+                "updatedAt": r["updated_at"].isoformat() if r["updated_at"] else None
+            })
+        
+        return {
+            "bills": bills,
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+            "hasMore": offset + limit < total_count
+        }
+
 @app.get("/bill/{congress}/{bill_type}/{bill_number}")
 async def get_bill_view(
     congress: int,
@@ -783,3 +872,695 @@ async def bill_summaries(congress: int, bill_type: str, bill_number: str):
             "text": _strip_html(s.get("text") or s.get("summary")),
         })
     return {"summaries": out}
+
+@app.get("/bill/{congress}/{bill_type}/{bill_number}/generate-summary")
+async def generate_bill_summary(congress: int, bill_type: str, bill_number: str):
+    """Generate a summary by scraping bill text from congress.gov"""
+    import asyncio
+    import signal
+    
+    def timeout_handler(signum, frame):
+        raise TimeoutError("Summary generation timed out")
+    
+    try:
+        # Set a timeout for the entire operation (5 minutes)
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(300)  # 5 minutes
+        
+        print(f"Starting summary generation for {congress}/{bill_type}/{bill_number}")
+        
+        scraper = BillTextScraper(API_KEY)
+        
+        # Get the bill text (API first, then scraping)
+        print("Fetching bill text...")
+        bill_data = scraper.get_bill_text(congress, bill_type, bill_number)
+        
+        if not bill_data:
+            raise HTTPException(404, "Could not fetch bill text from congress.gov")
+        
+        print(f"Bill text fetched: {bill_data['length']:,} characters")
+        
+        # Check if the text is extremely large
+        if bill_data['length'] > 500000:  # 500k characters
+            print(f"Warning: Very large bill text ({bill_data['length']:,} chars)")
+        
+        # Generate summary with error handling
+        print("Generating summary...")
+        summary_data = scraper.generate_summary(bill_data['text'], bill_data['title'])
+        
+        # Cancel the timeout
+        signal.alarm(0)
+        
+        print("Summary generation completed successfully")
+        
+        return {
+            "success": True,
+            "bill_info": {
+                "congress": congress,
+                "bill_type": bill_type,
+                "bill_number": bill_number,
+                "title": bill_data['title'],
+                "source_url": bill_data['url'],
+                "text_length": bill_data['length']
+            },
+            "summary": summary_data['summary'],
+            "analysis": {
+                "key_phrases": summary_data['key_phrases'][:10],  # Limit to top 10 for API response
+                "sections": summary_data['sections'][:5],  # Limit to first 5 sections
+                "word_count": summary_data['word_count'],
+                "estimated_reading_time": summary_data['estimated_reading_time']
+            },
+            "generated_at": bill_data['scraped_at']
+        }
+        
+    except TimeoutError:
+        signal.alarm(0)
+        print("Summary generation timed out")
+        raise HTTPException(408, "Summary generation timed out - bill may be too large")
+    except HTTPException:
+        signal.alarm(0)
+        raise
+    except Exception as e:
+        signal.alarm(0)
+        print(f"Error in summary generation: {str(e)}")
+        raise HTTPException(500, f"Error generating summary: {str(e)}")
+
+# === BETTING SYSTEM ENDPOINTS ===
+
+class CreateUserRequest(BaseModel):
+    username: str
+    email: Optional[str] = None
+
+class PlaceBetRequest(BaseModel):
+    market_id: int
+    user_id: int
+    position: str  # 'pass' or 'fail'
+    amount: float
+
+class CreateMarketRequest(BaseModel):
+    congress: int
+    bill_type: str
+    bill_number: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    deadline: Optional[str] = None  # ISO datetime string
+    market_type: str = "bill_passage"  # 'bill_passage', 'member_vote', 'vote_count', 'timeline'
+    target_member: Optional[str] = None  # bioguide_id for member_vote markets
+    target_count: Optional[int] = None   # for vote_count markets
+    target_date: Optional[str] = None    # ISO date for timeline markets
+    bill_exists: bool = True  # false for speculative bills
+
+class CreateSpeculativeBillRequest(BaseModel):
+    congress: int
+    bill_type: str
+    bill_number: str
+    title: str
+    description: Optional[str] = None
+    expected_intro_date: Optional[str] = None
+
+@app.post("/users")
+async def create_user(request: CreateUserRequest):
+    """Create a new user account with starting balance"""
+    pool: asyncpg.Pool = app.state.pool
+    async with pool.acquire() as conn:
+        try:
+            user_id = await conn.fetchval(
+                """
+                INSERT INTO users (username, email)
+                VALUES ($1, $2)
+                RETURNING user_id
+                """,
+                request.username, request.email
+            )
+            return {"user_id": user_id, "username": request.username, "balance": 1000.00}
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(400, "Username already exists")
+
+@app.get("/users/{user_id}")
+async def get_user(user_id: int):
+    """Get user profile and balance"""
+    pool: asyncpg.Pool = app.state.pool
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow(
+            "SELECT user_id, username, email, balance, created_at FROM users WHERE user_id = $1",
+            user_id
+        )
+        if not user:
+            raise HTTPException(404, "User not found")
+        
+        return {
+            "user_id": user["user_id"],
+            "username": user["username"],
+            "email": user["email"],
+            "balance": float(user["balance"]),
+            "created_at": _iso(user["created_at"])
+        }
+
+@app.get("/markets")
+async def list_betting_markets(
+    status: str = Query("active", description="active, resolved, or all"),
+    limit: int = Query(50, le=100)
+):
+    """List betting markets"""
+    pool: asyncpg.Pool = app.state.pool
+    async with pool.acquire() as conn:
+        if status == "all":
+            markets = await conn.fetch(
+                """
+                SELECT bm.*, b.title as bill_title
+                FROM betting_markets bm
+                LEFT JOIN bills b ON b.congress = bm.congress 
+                    AND b.bill_type = bm.bill_type 
+                    AND b.bill_number = bm.bill_number
+                ORDER BY bm.created_at DESC
+                LIMIT $1
+                """,
+                limit
+            )
+        else:
+            markets = await conn.fetch(
+                """
+                SELECT bm.*, b.title as bill_title
+                FROM betting_markets bm
+                LEFT JOIN bills b ON b.congress = bm.congress 
+                    AND b.bill_type = bm.bill_type 
+                    AND b.bill_number = bm.bill_number
+                WHERE bm.status = $1
+                ORDER BY bm.created_at DESC
+                LIMIT $2
+                """,
+                status, limit
+            )
+        
+        # Get current odds for each market
+        result = []
+        for market in markets:
+            odds = await conn.fetch(
+                "SELECT position, odds FROM market_odds WHERE market_id = $1",
+                market["market_id"]
+            )
+            
+            # Get total betting volume
+            volume = await conn.fetchval(
+                "SELECT COALESCE(SUM(amount), 0) FROM bets WHERE market_id = $1",
+                market["market_id"]
+            ) or 0
+            
+            # Get member name for member_vote markets
+            member_name = None
+            if market["market_type"] == "member_vote" and market["target_member"]:
+                member_row = await conn.fetchrow(
+                    "SELECT name FROM members WHERE bioguide_id = $1",
+                    market["target_member"]
+                )
+                member_name = member_row["name"] if member_row else market["target_member"]
+            
+            result.append({
+                "market_id": market["market_id"],
+                "congress": market["congress"],
+                "bill_type": market["bill_type"],
+                "bill_number": market["bill_number"],
+                "title": market["title"] or market["bill_title"],
+                "description": market["description"],
+                "status": market["status"],
+                "resolution": market["resolution"],
+                "deadline": _iso(market["deadline"]),
+                "created_at": _iso(market["created_at"]),
+                "market_type": market["market_type"],
+                "target_member": market["target_member"],
+                "target_member_name": member_name,
+                "target_count": market["target_count"],
+                "target_date": _iso(market["target_date"]),
+                "bill_exists": market["bill_exists"],
+                "odds": {row["position"]: float(row["odds"]) for row in odds},
+                "volume": float(volume)
+            })
+        
+        return result
+
+@app.post("/speculative-bills")
+async def create_speculative_bill(request: CreateSpeculativeBillRequest):
+    """Create a speculative/future bill for betting"""
+    pool: asyncpg.Pool = app.state.pool
+    async with pool.acquire() as conn:
+        expected_date = None
+        if request.expected_intro_date:
+            try:
+                expected_date = datetime.fromisoformat(request.expected_intro_date).date()
+            except ValueError:
+                raise HTTPException(400, "Invalid expected_intro_date format")
+        
+        try:
+            spec_bill_id = await conn.fetchval(
+                """
+                INSERT INTO speculative_bills (congress, bill_type, bill_number, title, description, expected_intro_date)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING spec_bill_id
+                """,
+                request.congress, request.bill_type.lower(), request.bill_number,
+                request.title, request.description, expected_date
+            )
+            
+            return {"spec_bill_id": spec_bill_id, "status": "created"}
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(400, "Speculative bill already exists")
+
+@app.post("/markets")
+async def create_betting_market(request: CreateMarketRequest):
+    """Create a new betting market for a bill"""
+    pool: asyncpg.Pool = app.state.pool
+    async with pool.acquire() as conn:
+        # Validate market type
+        valid_types = ["bill_passage", "member_vote", "vote_count", "timeline"]
+        if request.market_type not in valid_types:
+            raise HTTPException(400, f"Invalid market_type. Must be one of: {valid_types}")
+        
+        # Check if bill exists (if bill_exists is True)
+        bill_title = None
+        if request.bill_exists:
+            bill = await conn.fetchrow(
+                "SELECT title FROM bills WHERE congress = $1 AND bill_type = $2 AND bill_number = $3",
+                request.congress, request.bill_type.lower(), request.bill_number
+            )
+            if bill:
+                bill_title = bill["title"]
+        else:
+            # Check speculative bills
+            spec_bill = await conn.fetchrow(
+                "SELECT title FROM speculative_bills WHERE congress = $1 AND bill_type = $2 AND bill_number = $3",
+                request.congress, request.bill_type.lower(), request.bill_number
+            )
+            if spec_bill:
+                bill_title = spec_bill["title"]
+        
+        # Validate member for member_vote markets
+        if request.market_type == "member_vote":
+            if not request.target_member:
+                raise HTTPException(400, "target_member required for member_vote markets")
+            
+            # Verify member exists
+            member = await conn.fetchrow(
+                "SELECT name FROM members WHERE bioguide_id = $1",
+                request.target_member.upper()
+            )
+            if not member:
+                raise HTTPException(400, f"Member {request.target_member} not found")
+        
+        # Parse optional dates
+        deadline = None
+        if request.deadline:
+            try:
+                deadline = datetime.fromisoformat(request.deadline.replace('Z', '+00:00'))
+            except ValueError:
+                raise HTTPException(400, "Invalid deadline format")
+        
+        target_date = None
+        if request.target_date:
+            try:
+                target_date = datetime.fromisoformat(request.target_date).date()
+            except ValueError:
+                raise HTTPException(400, "Invalid target_date format")
+        
+        market_id = await conn.fetchval(
+            """
+            INSERT INTO betting_markets (
+                congress, bill_type, bill_number, title, description, deadline,
+                market_type, target_member, target_count, target_date, bill_exists
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            RETURNING market_id
+            """,
+            request.congress, request.bill_type.lower(), request.bill_number,
+            request.title or bill_title, request.description, deadline,
+            request.market_type, request.target_member, request.target_count, 
+            target_date, request.bill_exists
+        )
+        
+        # Set initial odds based on market type
+        if request.market_type == "bill_passage":
+            positions = [("pass", 2.0), ("fail", 2.0)]
+        elif request.market_type == "member_vote":
+            positions = [("yes", 2.0), ("no", 2.0)]
+        elif request.market_type == "vote_count":
+            positions = [("over", 2.0), ("under", 2.0)]
+        elif request.market_type == "timeline":
+            positions = [("before", 2.0), ("after", 2.0)]
+        
+        for position, odds in positions:
+            await conn.execute(
+                "INSERT INTO market_odds (market_id, position, odds) VALUES ($1, $2, $3)",
+                market_id, position, odds
+            )
+        
+        return {"market_id": market_id, "status": "created"}
+
+@app.get("/markets/{market_id}")
+async def get_market_detail(market_id: int):
+    """Get detailed market information including recent bets"""
+    pool: asyncpg.Pool = app.state.pool
+    async with pool.acquire() as conn:
+        market = await conn.fetchrow(
+            """
+            SELECT bm.*, b.title as bill_title
+            FROM betting_markets bm
+            LEFT JOIN bills b ON b.congress = bm.congress 
+                AND b.bill_type = bm.bill_type 
+                AND b.bill_number = bm.bill_number
+            WHERE bm.market_id = $1
+            """,
+            market_id
+        )
+        
+        if not market:
+            raise HTTPException(404, "Market not found")
+        
+        # Get current odds
+        odds = await conn.fetch(
+            "SELECT position, odds FROM market_odds WHERE market_id = $1",
+            market_id
+        )
+        
+        # Get recent bets
+        recent_bets = await conn.fetch(
+            """
+            SELECT b.bet_id, b.position, b.amount, b.odds, b.placed_at, u.username
+            FROM bets b
+            JOIN users u ON u.user_id = b.user_id
+            WHERE b.market_id = $1
+            ORDER BY b.placed_at DESC
+            LIMIT 20
+            """,
+            market_id
+        )
+        
+        # Get betting stats
+        stats = await conn.fetchrow(
+            """
+            SELECT 
+                COUNT(*) as total_bets,
+                SUM(amount) as total_volume,
+                SUM(CASE WHEN position = 'pass' THEN amount ELSE 0 END) as pass_volume,
+                SUM(CASE WHEN position = 'fail' THEN amount ELSE 0 END) as fail_volume
+            FROM bets 
+            WHERE market_id = $1
+            """,
+            market_id
+        )
+        
+        return {
+            "market_id": market["market_id"],
+            "congress": market["congress"],
+            "bill_type": market["bill_type"],
+            "bill_number": market["bill_number"],
+            "title": market["title"] or market["bill_title"],
+            "description": market["description"],
+            "status": market["status"],
+            "resolution": market["resolution"],
+            "deadline": _iso(market["deadline"]),
+            "created_at": _iso(market["created_at"]),
+            "odds": {row["position"]: float(row["odds"]) for row in odds},
+            "recent_bets": [
+                {
+                    "bet_id": bet["bet_id"],
+                    "username": bet["username"],
+                    "position": bet["position"],
+                    "amount": float(bet["amount"]),
+                    "odds": float(bet["odds"]) if bet["odds"] else None,
+                    "placed_at": _iso(bet["placed_at"])
+                }
+                for bet in recent_bets
+            ],
+            "stats": {
+                "total_bets": stats["total_bets"] or 0,
+                "total_volume": float(stats["total_volume"] or 0),
+                "pass_volume": float(stats["pass_volume"] or 0),
+                "fail_volume": float(stats["fail_volume"] or 0)
+            }
+        }
+
+@app.post("/bets")
+async def place_bet(request: PlaceBetRequest):
+    """Place a bet on a market"""
+    if request.amount <= 0:
+        raise HTTPException(400, "Bet amount must be positive")
+    
+    pool: asyncpg.Pool = app.state.pool
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Check market exists and is active
+            market = await conn.fetchrow(
+                "SELECT status, deadline, market_type FROM betting_markets WHERE market_id = $1",
+                request.market_id
+            )
+            
+            if not market:
+                raise HTTPException(404, "Market not found")
+            
+            # Validate position based on market type
+            valid_positions = {
+                "bill_passage": ["pass", "fail"],
+                "member_vote": ["yes", "no"],
+                "vote_count": ["over", "under"],
+                "timeline": ["before", "after"]
+            }
+            
+            market_type = market["market_type"]
+            if market_type not in valid_positions:
+                raise HTTPException(400, f"Unknown market type: {market_type}")
+            
+            if request.position not in valid_positions[market_type]:
+                raise HTTPException(400, f"Invalid position '{request.position}' for {market_type} market. Valid positions: {valid_positions[market_type]}")
+            
+            # Continue with existing validation...
+            
+            if market["status"] != "active":
+                raise HTTPException(400, "Market is not active")
+            
+            if market["deadline"] and datetime.now(timezone.utc) > market["deadline"]:
+                raise HTTPException(400, "Betting deadline has passed")
+            
+            # Check user balance
+            user = await conn.fetchrow(
+                "SELECT balance FROM users WHERE user_id = $1",
+                request.user_id
+            )
+            
+            if not user:
+                raise HTTPException(404, "User not found")
+            
+            if user["balance"] < request.amount:
+                raise HTTPException(400, "Insufficient balance")
+            
+            # Get current odds
+            odds_row = await conn.fetchrow(
+                "SELECT odds FROM market_odds WHERE market_id = $1 AND position = $2",
+                request.market_id, request.position
+            )
+            
+            if not odds_row:
+                raise HTTPException(400, "Invalid position for this market")
+            
+            current_odds = float(odds_row["odds"])
+            potential_payout = request.amount * current_odds
+            
+            # Deduct from user balance
+            await conn.execute(
+                "UPDATE users SET balance = balance - $1, updated_at = now() WHERE user_id = $2",
+                request.amount, request.user_id
+            )
+            
+            # Place the bet
+            bet_id = await conn.fetchval(
+                """
+                INSERT INTO bets (market_id, user_id, position, amount, odds, potential_payout)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING bet_id
+                """,
+                request.market_id, request.user_id, request.position, 
+                request.amount, current_odds, potential_payout
+            )
+            
+            # Update odds based on new betting volume (simple algorithm)
+            await _update_market_odds(conn, request.market_id)
+            
+            return {
+                "bet_id": bet_id,
+                "amount": request.amount,
+                "position": request.position,
+                "odds": current_odds,
+                "potential_payout": potential_payout
+            }
+
+@app.get("/users/{user_id}/bets")
+async def get_user_bets(
+    user_id: int,
+    status: str = Query("all", description="active, resolved, or all"),
+    limit: int = Query(50, le=100)
+):
+    """Get user's betting history"""
+    pool: asyncpg.Pool = app.state.pool
+    async with pool.acquire() as conn:
+        if status == "all":
+            bets = await conn.fetch(
+                """
+                SELECT b.*, bm.congress, bm.bill_type, bm.bill_number, bm.title, bm.status as market_status
+                FROM bets b
+                JOIN betting_markets bm ON bm.market_id = b.market_id
+                WHERE b.user_id = $1
+                ORDER BY b.placed_at DESC
+                LIMIT $2
+                """,
+                user_id, limit
+            )
+        else:
+            bets = await conn.fetch(
+                """
+                SELECT b.*, bm.congress, bm.bill_type, bm.bill_number, bm.title, bm.status as market_status
+                FROM bets b
+                JOIN betting_markets bm ON bm.market_id = b.market_id
+                WHERE b.user_id = $1 AND b.status = $2
+                ORDER BY b.placed_at DESC
+                LIMIT $3
+                """,
+                user_id, status, limit
+            )
+        
+        return [
+            {
+                "bet_id": bet["bet_id"],
+                "market_id": bet["market_id"],
+                "position": bet["position"],
+                "amount": float(bet["amount"]),
+                "odds": float(bet["odds"]) if bet["odds"] else None,
+                "potential_payout": float(bet["potential_payout"]) if bet["potential_payout"] else None,
+                "status": bet["status"],
+                "placed_at": _iso(bet["placed_at"]),
+                "resolved_at": _iso(bet["resolved_at"]),
+                "market": {
+                    "congress": bet["congress"],
+                    "bill_type": bet["bill_type"],
+                    "bill_number": bet["bill_number"],
+                    "title": bet["title"],
+                    "status": bet["market_status"]
+                }
+            }
+            for bet in bets
+        ]
+
+async def _update_market_odds(conn, market_id: int):
+    """Simple odds calculation based on betting volume"""
+    # Get total volume for each position
+    volumes = await conn.fetch(
+        """
+        SELECT position, COALESCE(SUM(amount), 0) as volume
+        FROM bets 
+        WHERE market_id = $1 AND status = 'active'
+        GROUP BY position
+        """,
+        market_id
+    )
+    
+    volume_dict = {row["position"]: float(row["volume"]) for row in volumes}
+    pass_volume = volume_dict.get("pass", 0)
+    fail_volume = volume_dict.get("fail", 0)
+    total_volume = pass_volume + fail_volume
+    
+    if total_volume == 0:
+        # No bets yet, keep 50/50 odds
+        return
+    
+    # Calculate implied probabilities (with some smoothing)
+    smoothing = 100  # Prevents extreme odds
+    pass_prob = (pass_volume + smoothing/2) / (total_volume + smoothing)
+    fail_prob = (fail_volume + smoothing/2) / (total_volume + smoothing)
+    
+    # Convert to odds (with house edge)
+    house_edge = 0.05  # 5% house edge
+    pass_odds = (1 - house_edge) / pass_prob
+    fail_odds = (1 - house_edge) / fail_prob
+    
+    # Update odds in database
+    await conn.execute(
+        """
+        UPDATE market_odds 
+        SET odds = $2, updated_at = now() 
+        WHERE market_id = $1 AND position = 'pass'
+        """,
+        market_id, pass_odds
+    )
+    
+    await conn.execute(
+        """
+        UPDATE market_odds 
+        SET odds = $2, updated_at = now() 
+        WHERE market_id = $1 AND position = 'fail'
+        """,
+        market_id, fail_odds
+    )
+
+@app.post("/markets/{market_id}/resolve")
+async def resolve_market(market_id: int, resolution: str):
+    """Resolve a betting market (admin function)"""
+    if resolution not in ["pass", "fail", "withdrawn", "cancelled"]:
+        raise HTTPException(400, "Invalid resolution")
+    
+    pool: asyncpg.Pool = app.state.pool
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Update market status
+            await conn.execute(
+                """
+                UPDATE betting_markets 
+                SET status = 'resolved', resolution = $2, resolved_at = now(), updated_at = now()
+                WHERE market_id = $1
+                """,
+                market_id, resolution
+            )
+            
+            if resolution in ["pass", "fail"]:
+                # Pay out winning bets
+                winning_bets = await conn.fetch(
+                    "SELECT bet_id, user_id, potential_payout FROM bets WHERE market_id = $1 AND position = $2 AND status = 'active'",
+                    market_id, resolution
+                )
+                
+                for bet in winning_bets:
+                    # Add winnings to user balance
+                    await conn.execute(
+                        "UPDATE users SET balance = balance + $1, updated_at = now() WHERE user_id = $2",
+                        bet["potential_payout"], bet["user_id"]
+                    )
+                    
+                    # Mark bet as won
+                    await conn.execute(
+                        "UPDATE bets SET status = 'won', resolved_at = now() WHERE bet_id = $1",
+                        bet["bet_id"]
+                    )
+                
+                # Mark losing bets
+                await conn.execute(
+                    "UPDATE bets SET status = 'lost', resolved_at = now() WHERE market_id = $1 AND position != $2 AND status = 'active'",
+                    market_id, resolution
+                )
+            
+            elif resolution in ["withdrawn", "cancelled"]:
+                # Refund all bets
+                active_bets = await conn.fetch(
+                    "SELECT bet_id, user_id, amount FROM bets WHERE market_id = $1 AND status = 'active'",
+                    market_id
+                )
+                
+                for bet in active_bets:
+                    # Refund to user balance
+                    await conn.execute(
+                        "UPDATE users SET balance = balance + $1, updated_at = now() WHERE user_id = $2",
+                        bet["amount"], bet["user_id"]
+                    )
+                    
+                    # Mark bet as refunded
+                    await conn.execute(
+                        "UPDATE bets SET status = 'refunded', resolved_at = now() WHERE bet_id = $1",
+                        bet["bet_id"]
+                    )
+            
+            return {"status": "resolved", "resolution": resolution}
