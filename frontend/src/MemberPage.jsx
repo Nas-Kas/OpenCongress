@@ -330,17 +330,37 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1 }) 
                 <tr key={v.roll} style={{ borderTop: "1px solid #f1f5f9" }}>
                   <td>#{v.roll}</td>
                   <td>
-                    {v.legislationUrl ? (
-                      <a
-                        href={v.legislationUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ color: "#1d4ed8", textDecoration: "underline" }}
+                    {v.legislationType && v.legislationNumber ? (
+                      <button
+                        onClick={() => {
+                          // Create bill view URL
+                          const billType = (v.legislationType || "").toLowerCase().replace(/\s+/g, "");
+                          const billNumber = String(v.legislationNumber || "");
+                          const congress = 119; // Current congress
+                          
+                          // Navigate to bill view
+                          const url = new URL(window.location);
+                          url.searchParams.set('congress', congress);
+                          url.searchParams.set('billType', billType);
+                          url.searchParams.set('billNumber', billNumber);
+                          url.searchParams.delete('member'); // Remove member param
+                          window.location.href = url.toString();
+                        }}
+                        style={{ 
+                          color: "#1d4ed8", 
+                          textDecoration: "underline",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 0,
+                          font: "inherit",
+                          textAlign: "left"
+                        }}
                       >
                         {v.title
                           ? `${v.title} — ${v.legislationType} ${v.legislationNumber}`
                           : `${v.legislationType ?? ""} ${v.legislationNumber ?? ""}`.trim()}
-                      </a>
+                      </button>
                     ) : (
                       v.title
                         ? `${v.title} — ${v.legislationType} ${v.legislationNumber}`

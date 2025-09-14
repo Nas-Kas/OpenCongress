@@ -4,6 +4,9 @@ import VotesTable from "./VotesTable";
 import MemberPage from "./MemberPage";
 import MemberSearch from "./MemberSearch";
 import BillPage from "./BillPage";
+import BettingPage from "./BettingPage";
+import Learn from "./Learn";
+import BillsWithoutVotes from "./BillsWithoutVotes";
 
 // tiny helpers for URL sync
 const getQS = () => new URLSearchParams(window.location.search);
@@ -32,8 +35,19 @@ export default function App() {
   // Bill view state
   const [selectedBill, setSelectedBill] = useState(null);     // { congress, billType, billNumber }
 
+  // Betting view state
+  const [showBetting, setShowBetting] = useState(false);
+  const [showLearn, setShowLearn] = useState(false);
+  const [showBillsWithoutVotes, setShowBillsWithoutVotes] = useState(false);
+
   // Tab state derived from selection
-  const activeTab = useMemo(() => (selectedMember ? "member" : "rolls"), [selectedMember]);
+  const activeTab = useMemo(() => {
+    if (showBetting) return "betting";
+    if (showLearn) return "learn";
+    if (showBillsWithoutVotes) return "bills";
+    if (selectedMember) return "member";
+    return "rolls";
+  }, [selectedMember, showBetting, showLearn, showBillsWithoutVotes]);
 
   // Initial URL hydration
   useEffect(() => {
@@ -44,7 +58,24 @@ export default function App() {
     const roll = qs.get("roll");
     const billType = qs.get("billType");
     const billNumber = qs.get("billNumber");
+    const betting = qs.get("betting");
 
+    if (betting === "true") {
+      setShowBetting(true);
+      return;
+    }
+
+    const learn = qs.get("learn");
+    if (learn === "true") {
+      setShowLearn(true);
+      return;
+    }
+
+    const bills = qs.get("bills");
+    if (bills === "true") {
+      setShowBillsWithoutVotes(true);
+      return;
+    }
     if (member) {
       setSelectedMember(member.toUpperCase());
       return;
@@ -84,6 +115,27 @@ export default function App() {
     }
   }, [selectedBill]);
 
+  // Sync URL when switching to betting
+  useEffect(() => {
+    if (showBetting) {
+      setQS({ betting: "true" });
+    }
+  }, [showBetting]);
+
+  // Sync URL when switching to learn
+  useEffect(() => {
+    if (showLearn) {
+      setQS({ learn: "true" });
+    }
+  }, [showLearn]);
+
+  // Sync URL when switching to bills
+  useEffect(() => {
+    if (showBillsWithoutVotes) {
+      setQS({ bills: "true" });
+    }
+  }, [showBillsWithoutVotes]);
+
   // When a vote is selected, fetch its details
   useEffect(() => {
     if (!selectedVote) return;
@@ -110,6 +162,87 @@ export default function App() {
       .catch((e) => setError(String(e)))
       .finally(() => setLoadingVotes(false));
   }, [selectedVote]);
+
+  // --- Betting view branch ---
+  if (showBetting) {
+    return (
+      <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
+        <NavTabs
+          active="betting"
+          onChange={(tab) => {
+            if (tab === "rolls") {
+              setShowBetting(false);
+              setQS({});
+            } else if (tab === "member") {
+              setShowBetting(false);
+              setSelectedMember("C001130");
+            } else if (tab === "learn") {
+              setShowBetting(false);
+              setShowLearn(true);
+            } else if (tab === "bills") {
+              setShowBetting(false);
+              setShowBillsWithoutVotes(true);
+            }
+          }}
+        />
+        <BettingPage />
+      </div>
+    );
+  }
+
+  // --- Learn view branch ---
+  if (showLearn) {
+    return (
+      <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
+        <NavTabs
+          active="learn"
+          onChange={(tab) => {
+            if (tab === "rolls") {
+              setShowLearn(false);
+              setQS({});
+            } else if (tab === "member") {
+              setShowLearn(false);
+              setSelectedMember("C001130");
+            } else if (tab === "betting") {
+              setShowLearn(false);
+              setShowBetting(true);
+            } else if (tab === "bills") {
+              setShowLearn(false);
+              setShowBillsWithoutVotes(true);
+            }
+          }}
+        />
+        <Learn />
+      </div>
+    );
+  }
+
+  // --- Bills Without Votes view branch ---
+  if (showBillsWithoutVotes) {
+    return (
+      <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
+        <NavTabs
+          active="bills"
+          onChange={(tab) => {
+            if (tab === "rolls") {
+              setShowBillsWithoutVotes(false);
+              setQS({});
+            } else if (tab === "member") {
+              setShowBillsWithoutVotes(false);
+              setSelectedMember("C001130");
+            } else if (tab === "betting") {
+              setShowBillsWithoutVotes(false);
+              setShowBetting(true);
+            } else if (tab === "learn") {
+              setShowBillsWithoutVotes(false);
+              setShowLearn(true);
+            }
+          }}
+        />
+        <BillsWithoutVotes />
+      </div>
+    );
+  }
 
   // --- Bill view branch ---
   if (selectedBill) {
@@ -143,6 +276,15 @@ export default function App() {
               const qs = getQS();
               const c = qs.get("congress"), s = qs.get("session"), r = qs.get("roll");
               if (!c || !s || !r) setQS({});
+            } else if (tab === "betting") {
+              setSelectedMember(null);
+              setShowBetting(true);
+            } else if (tab === "learn") {
+              setSelectedMember(null);
+              setShowLearn(true);
+            } else if (tab === "bills") {
+              setSelectedMember(null);
+              setShowBillsWithoutVotes(true);
             }
           }}
         />
@@ -174,11 +316,33 @@ export default function App() {
           if (tab === "member") {
             setSelectedMember("C001130"); // optional seed
             setQS({ member: "C001130" });
+          } else if (tab === "betting") {
+            setShowBetting(true);
+            setSelectedMember(null);
+            setSelectedBill(null);
+          } else if (tab === "learn") {
+            setShowLearn(true);
+            setSelectedMember(null);
+            setSelectedBill(null);
+          } else if (tab === "bills") {
+            setShowBillsWithoutVotes(true);
+            setSelectedMember(null);
+            setSelectedBill(null);
           }
         }}
       />
 
-      <h1 style={{ marginTop: 8 }}>House Roll-Call Votes</h1>
+      <div style={{ marginTop: 8, marginBottom: 16 }}>
+        <h1 style={{ margin: "0 0 8px 0" }}>🗳️ House Roll-Call Votes</h1>
+        <p style={{ 
+          margin: 0, 
+          color: "#6b7280", 
+          fontSize: 14,
+          lineHeight: 1.4 
+        }}>
+          Bills that have been voted on by the House. For bills that haven't been voted on yet, check the "📋 Early Bills" tab.
+        </p>
+      </div>
 
       {/* Roll select and member search */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center" }}>
@@ -268,9 +432,12 @@ function NavTabs({ active = "rolls", onChange }) {
     fontWeight: 600,
   });
   return (
-    <div style={{ display: "flex", gap: 8 }}>
-      <button style={tabStyle(active === "rolls")} onClick={() => onChange?.("rolls")}>Roll Calls</button>
-      <button style={tabStyle(active === "member")} onClick={() => onChange?.("member")}>Member</button>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <button style={tabStyle(active === "rolls")} onClick={() => onChange?.("rolls")}>🗳️ Voted Bills</button>
+      <button style={tabStyle(active === "member")} onClick={() => onChange?.("member")}>👤 Member</button>
+      <button style={tabStyle(active === "betting")} onClick={() => onChange?.("betting")}>💰 Betting</button>
+      <button style={tabStyle(active === "bills")} onClick={() => onChange?.("bills")}>📋 Early Bills</button>
+      <button style={tabStyle(active === "learn")} onClick={() => onChange?.("learn")}>🎓 Learn</button>
     </div>
   );
 }
