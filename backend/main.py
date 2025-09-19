@@ -105,6 +105,7 @@ async def list_house_votes(
                        hv.question, hv.result, hv.started,
                        hv.legislation_type, hv.legislation_number,
                        hv.source, hv.legislation_url,
+                       hv.yea_count, hv.nay_count, hv.present_count, hv.not_voting_count,
                        CASE WHEN $1 THEN b.title ELSE NULL END AS title
                 FROM house_votes hv
                 LEFT JOIN bills b
@@ -124,6 +125,7 @@ async def list_house_votes(
                        hv.question, hv.result, hv.started,
                        hv.legislation_type, hv.legislation_number,
                        hv.source, hv.legislation_url,
+                       hv.yea_count, hv.nay_count, hv.present_count, hv.not_voting_count,
                        CASE WHEN $1 THEN b.title ELSE NULL END AS title
                 FROM house_votes hv
                 LEFT JOIN bills b
@@ -148,6 +150,10 @@ async def list_house_votes(
         "legislationNumber": r["legislation_number"],
         "source": r["legislation_url"] or r["source"],
         "title": r["title"] if include_titles else None,
+        "yeaCount": r["yea_count"],
+        "nayCount": r["nay_count"],
+        "presentCount": r["present_count"],
+        "notVotingCount": r["not_voting_count"],
     } for r in rows]
 
     # Fallback if DB returned nothing
@@ -180,9 +186,13 @@ async def list_house_votes(
                 "legislationNumber": b.get("legislationNumber"),
                 "source": b.get("sourceDataURL"),
                 "title": title,
+                "yeaCount": None,  # API fallback doesn't have counts
+                "nayCount": None,
+                "presentCount": None,
+                "notVotingCount": None,
             })
 
-    return out
+    return {"votes": out}
 
 
 @app.get("/house/vote-detail")

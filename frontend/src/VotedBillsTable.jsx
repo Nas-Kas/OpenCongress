@@ -168,9 +168,23 @@ export default function VotedBillsTable({ congress = 119, session = 1, onSelectV
 
   const setQuickResult = (r) => setFRes((cur) => (cur === r ? "all" : r));
 
-  if (loading) return <p>Loading voted bills…</p>;
-  if (err) return <p style={{ color: 'red' }}>Error: {err}</p>;
-  if (!data.length) return <p>No voted bills found.</p>;
+  if (loading) return <p>Loading voted bills… (Congress {congress}, Session {session})</p>;
+  if (err) return (
+    <div>
+      <p style={{ color: 'red' }}>Error loading voted bills: {err}</p>
+      <p style={{ fontSize: 12, color: '#666' }}>
+        Trying to fetch: http://127.0.0.1:8000/house/votes?congress={congress}&session={session}&limit=200
+      </p>
+    </div>
+  );
+  if (!data.length) return (
+    <div>
+      <p>No voted bills found.</p>
+      <p style={{ fontSize: 12, color: '#666' }}>
+        Searched Congress {congress}, Session {session}. Make sure the backend is running and has data.
+      </p>
+    </div>
+  );
 
   const headerLabels = ["Roll", "Bill", "Question", "Result", "Vote Counts", "Date"];
 
