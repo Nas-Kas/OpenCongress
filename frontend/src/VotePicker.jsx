@@ -20,7 +20,7 @@ export default function VotePicker({ onSelect }) {
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
         return r.json();
       })
-      .then((data) => setVotes(data || []))
+      .then((data) => setVotes(data?.votes || data || []))
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
   }, []);

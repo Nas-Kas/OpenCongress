@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import VotePicker from "./VotePicker";
 import VotesTable from "./VotesTable";
+import VotedBillsTable from "./VotedBillsTable";
 import MemberPage from "./MemberPage";
 import MemberSearch from "./MemberSearch";
 import BillPage from "./BillPage";
@@ -39,6 +40,9 @@ export default function App() {
   const [showBetting, setShowBetting] = useState(false);
   const [showLearn, setShowLearn] = useState(false);
   const [showBillsWithoutVotes, setShowBillsWithoutVotes] = useState(false);
+  
+  // View mode for voted bills
+  const [showVotedBillsList, setShowVotedBillsList] = useState(true); // true = table view, false = individual vote view
 
   // Tab state derived from selection
   const activeTab = useMemo(() => {
@@ -344,19 +348,81 @@ export default function App() {
         </p>
       </div>
 
-      {/* Roll select and member search */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center" }}>
-      <VotePicker
-        onSelect={(payload) => {
-          setSelectedVote(payload);
-          setSelectedMember(null);
-          setSelectedBill(null);
-        }}
-      />
-        <MemberSearch onSelect={(id) => id && setSelectedMember(id.toUpperCase())} />
+      {/* View toggle and search */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 4 }}>
+          <button
+            onClick={() => {
+              setShowVotedBillsList(true);
+              setSelectedVote(null);
+            }}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              background: showVotedBillsList ? "#eef2ff" : "transparent",
+              color: showVotedBillsList ? "#1d4ed8" : "#111",
+              border: "1px solid #e5e7eb",
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            📊 Vote Overview
+          </button>
+          <button
+            onClick={() => {
+              setShowVotedBillsList(false);
+              if (!selectedVote) {
+                // Set a default vote if none selected
+                setSelectedVote({ congress: 119, session: 1, roll: 1 });
+              }
+            }}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              background: !showVotedBillsList ? "#eef2ff" : "transparent",
+              color: !showVotedBillsList ? "#1d4ed8" : "#111",
+              border: "1px solid #e5e7eb",
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            👥 Vote by Member
+          </button>
+        </div>
+        <div style={{ flex: 1 }}>
+          <MemberSearch onSelect={(id) => id && setSelectedMember(id.toUpperCase())} />
+        </div>
       </div>
 
-      {error && <p style={{ color: "red", marginTop: 12 }}>Error: {error}</p>}
+      {showVotedBillsList ? (
+        <VotedBillsTable
+          congress={119}
+          session={1}
+          onSelectVote={(vote) => {
+            setSelectedVote(vote);
+            setShowVotedBillsList(false);
+            setSelectedMember(null);
+            setSelectedBill(null);
+          }}
+          onSelectBill={(bill) => {
+            setSelectedBill(bill);
+            setSelectedMember(null);
+          }}
+        />
+      ) : (
+        <>
+          {/* Roll select */}
+          <div style={{ marginBottom: 16 }}>
+            <VotePicker
+              onSelect={(payload) => {
+                setSelectedVote(payload);
+                setSelectedMember(null);
+                setSelectedBill(null);
+              }}
+            />
+          </div>
+
+          {error && <p style={{ color: "red", marginTop: 12 }}>Error: {error}</p>}
 
       {!selectedVote ? (
         <p style={{ marginTop: 16, color: "#444" }}>Select a vote to see details.</p>
@@ -416,6 +482,8 @@ export default function App() {
             onOpenMember={(bioguideId) => bioguideId && setSelectedMember(bioguideId)}
           />
         </div>
+      )}
+        </>
       )}
     </div>
   );
