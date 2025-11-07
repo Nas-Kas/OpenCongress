@@ -284,29 +284,6 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1 }) 
         <p>No votes match your filters.</p>
       ) : (
         <div ref={scrollRef} style={{ overflowX: "auto", position: "relative" }}>
-          <div
-            style={{
-              position: "sticky",
-              top: stickyTop,
-              zIndex: 8, // below filters (10) / above body
-              background: "white",
-              boxShadow: "0 1px 0 #eee",
-              // keep width in sync with table width so horizontal scroll aligns
-              width: overlayWidth ? `${overlayWidth}px` : "100%",
-              pointerEvents: "none", // let clicks go through to the table links
-            }}
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: gridTemplate || "80px 1.5fr 2fr 1fr 1fr 120px",
-                gap: 0,
-                fontWeight: 700,
-                padding: "6px 8px",
-              }}
-            >
-            </div>
-          </div>
 
           {/* The real table (non-sticky header kept for semantics & measuring) */}
           <table
