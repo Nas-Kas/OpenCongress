@@ -1,6 +1,6 @@
 import { useState } from "react";
 import CivicsQuiz from "./CivicsQuiz";
-import BillAnalysisWorkshop from "./BillAnalysisWorkshop";
+import BillAnalysisWorkshop from "../src/BillAnalysisWorkshop";
 import HistoricalCaseStudies from "./HistoricalCaseStudies";
 import { useAchievements, AchievementNotification, AchievementPanel, ACHIEVEMENTS } from "./AchievementSystem";
 

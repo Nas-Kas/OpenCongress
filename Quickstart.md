@@ -42,8 +42,10 @@ python ingest.py --congress 119 --session 1 --mode update \
 
 # ingesting bills even without votes
 
+- python ingest_bills.py --congress 118
+- 
 500 most recent
-- python bill_ingest.py --congress 118 --mode recent --limit 500
+- python ingest_bills.py --congress 118 --mode recent --limit 500
 
 100 house and senate bills
-- python bill_ingest.py --congress 118 --mode by-type --bill-types hr s --limit-per-type 100
+- python ingest_bills.py --congress 118 --mode by-type --bill-types hr s --limit-per-type 100

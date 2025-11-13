@@ -1,6 +1,40 @@
-import { useEffect, useMemo, useState, useLayoutEffect, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-// classify result strings so we can filter / analyze
+const TOKENS = {
+  radius: 10,
+  border: "#E5E7EB",
+  borderSubtle: "#EEF2F7",
+  text: "#111827",
+  textMuted: "#6B7280",
+  cardBg: "#FFFFFF",
+  pageBg: "#F7F9FC",
+  shadow: "0 1px 2px rgba(0,0,0,0.04), 0 6px 16px rgba(0,0,0,0.04)",
+  badge: {
+    passBg: "#E9F8EE",
+    passFg: "#0B7A45",
+    failBg: "#FDECEC",
+    failFg: "#B42318",
+    otherBg: "#F2F4F7",
+    otherFg: "#344054",
+    yBg: "#EAF8F0",
+    yFg: "#15803D",
+    nBg: "#FDEEEE",
+    nFg: "#B91C1C",
+    pBg: "#F2F4F7",
+    pFg: "#475467",
+    nvBg: "#FEF6E7",
+    nvFg: "#92400E",
+  },
+  btn: {
+    primaryBg: "#2563EB",
+    primaryBgHover: "#1E4ED8",
+    primaryFg: "#FFFFFF",
+    secondaryBorder: "#E5E7EB",
+    secondaryHover: "#F8FAFC",
+  },
+};
+
+
 function classifyResult(result) {
   const s = (result || "").toLowerCase();
   if (s.includes("pass") || s.includes("agreed")) return "passed";
@@ -8,405 +42,441 @@ function classifyResult(result) {
   return "other";
 }
 
-export default function VotedBillsTable({ congress = 119, session = 1, onSelectVote, onSelectBill }) {
-  const [data, setData] = useState([]);
+function getCounts(v = {}) {
+  if (v.counts && typeof v.counts === "object") return v.counts;
+  return {
+    yea: v.yeaCount ?? 0,
+    nay: v.nayCount ?? 0,
+    present: v.presentCount ?? 0,
+    notVoting: v.notVotingCount ?? 0,
+  };
+}
+
+function ResultBadge({ result }) {
+  const cls = classifyResult(result);
+  const bg =
+    cls === "passed" ? TOKENS.badge.passBg :
+    cls === "failed" ? TOKENS.badge.failBg : TOKENS.badge.otherBg;
+  const fg =
+    cls === "passed" ? TOKENS.badge.passFg :
+    cls === "failed" ? TOKENS.badge.failFg : TOKENS.badge.otherFg;
+  return (
+    <span style={{
+      background: bg, color: fg, padding: "4px 10px",
+      borderRadius: 999, fontSize: 12, fontWeight: 700
+    }}>
+      {result || "—"}
+    </span>
+  );
+}
+
+function CountChip({ label, value, bg, fg }) {
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      background: bg,
+      color: fg,
+      borderRadius: 999,
+      padding: "2px 10px",
+      fontSize: 12,
+      fontWeight: 700,
+      fontVariantNumeric: "tabular-nums",
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace"
+    }}>
+      <span style={{ opacity: 0.8 }}>{label}</span>
+      <span>{value ?? 0}</span>
+    </span>
+  );
+}
+
+function Counts({ c }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <CountChip label="Y" value={c.yea} bg={TOKENS.badge.yBg} fg={TOKENS.badge.yFg} />
+      <CountChip label="N" value={c.nay} bg={TOKENS.badge.nBg} fg={TOKENS.badge.nFg} />
+      <CountChip label="P" value={c.present} bg={TOKENS.badge.pBg} fg={TOKENS.badge.pFg} />
+      <CountChip label="NV" value={c.notVoting} bg={TOKENS.badge.nvBg} fg={TOKENS.badge.nvFg} />
+    </div>
+  );
+}
+
+
+export default function VotedBillsTable({
+  congress = 119,
+  session = 1,
+  onSelectVote,
+  onSelectBill,
+}) {
+  const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // filters
   const [q, setQ] = useState("");
   const [fRes, setFRes] = useState("all");
   const [fType, setFType] = useState("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [density, setDensity] = useState("compact"); // "compact" | "comfortable"
 
-  const filtersRef = useRef(null);
-  const scrollRef = useRef(null); 
-  const tableRef = useRef(null);
-  const theadRef = useRef(null);
+  const [open, setOpen] = useState(() => new Set());
 
-  const [stickyTop, setStickyTop] = useState(0);
-  const [gridTemplate, setGridTemplate] = useState(""); // CSS grid template columns for overlay
-  const [overlayWidth, setOverlayWidth] = useState(0);  // px; keeps overlay width in sync
-
-  // Measure filter bar height live (so header sits just below it)
-  useLayoutEffect(() => {
-    let raf = 0;
-    const calcTop = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const el = filtersRef.current;
-        if (!el) return;
-        const styles = getComputedStyle(el);
-        const mb = parseFloat(styles.marginBottom) || 0;
-        setStickyTop(el.getBoundingClientRect().height + mb + 1); // +1 buffer
-      });
-    };
-    const ro = "ResizeObserver" in window ? new ResizeObserver(calcTop) : null;
-    if (ro && filtersRef.current) ro.observe(filtersRef.current);
-
-    calcTop();
-    window.addEventListener("resize", calcTop);
-    window.addEventListener("orientationchange", calcTop);
-    return () => {
-      if (ro) ro.disconnect();
-      window.removeEventListener("resize", calcTop);
-      window.removeEventListener("orientationchange", calcTop);
-      cancelAnimationFrame(raf);
-    };
-  }, []);
-
-  // Measure table header column widths and total width for the overlay header
-  useLayoutEffect(() => {
-    if (!data.length) return;
-
-    let raf = 0;
-    const measure = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const thead = theadRef.current;
-        const table = tableRef.current;
-        if (!thead || !table) return;
-
-        const ths = Array.from(thead.querySelectorAll("th"));
-        if (!ths.length) return;
-
-        const widths = ths.map((th) => Math.ceil(th.getBoundingClientRect().width));
-        const template = widths.map((w) => `${w}px`).join(" ");
-        setGridTemplate(template);
-        setOverlayWidth(Math.ceil(table.getBoundingClientRect().width));
-      });
-    };
-
-    // Run after first paint
-    measure();
-
-    // Watch table/thead for size changes (fonts, scrollbars, content wrap)
-    const roOK = "ResizeObserver" in window;
-    const roTable = roOK ? new ResizeObserver(measure) : null;
-    const roHead  = roOK ? new ResizeObserver(measure) : null;
-    if (roTable && tableRef.current) roTable.observe(tableRef.current);
-    if (roHead && theadRef.current) roHead.observe(theadRef.current);
-
-    // Also on window resizes and horizontal scroll wrapper resizes
-    window.addEventListener("resize", measure);
-    window.addEventListener("orientationchange", measure);
-
-    // If the browser supports font loading events, remeasure on ready
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(measure).catch(() => {});
-    }
-
-    return () => {
-      if (roTable) roTable.disconnect();
-      if (roHead) roHead.disconnect();
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("orientationchange", measure);
-      cancelAnimationFrame(raf);
-    };
-  }, [data]);
-
-  // Fetch voted bills data
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
     setErr(null);
-    setData([]);
-
+    setData(null);
     fetch(
-      `http://127.0.0.1:8000/house/votes?congress=${congress}&session=${session}&limit=200`,
+      `http://127.0.0.1:8000/house/votes?congress=${congress}&session=${session}&window=200`,
       { signal: ctrl.signal }
     )
       .then((r) => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); })
-      .then((response) => setData(response.votes || []))
+      .then(setData)
       .catch((e) => { if (e.name !== "AbortError") setErr(String(e)); })
       .finally(() => setLoading(false));
-
     return () => ctrl.abort();
   }, [congress, session]);
 
+  const votes = useMemo(() => data?.votes ?? [], [data]);
+
   const uniqueTypes = useMemo(() => {
     const s = new Set();
-    for (const v of data) if (v.legislationType) s.add(v.legislationType);
+    for (const v of votes) if (v.legislationType) s.add(v.legislationType);
     return Array.from(s);
-  }, [data]);
+  }, [votes]);
 
   const filtered = useMemo(() => {
-    let list = data;
+    let list = votes;
+
     if (q.trim()) {
       const needle = q.toLowerCase();
       list = list.filter(
         (v) =>
+          (v.title || "").toLowerCase().includes(needle) ||
           (v.question || "").toLowerCase().includes(needle) ||
           (v.legislationType || "").toLowerCase().includes(needle) ||
-          (v.legislationNumber || "").toString().toLowerCase().includes(needle) ||
-          (v.title || "").toLowerCase().includes(needle)
+          String(v.legislationNumber || "").includes(needle)
       );
     }
     if (fRes !== "all") list = list.filter((v) => classifyResult(v.result) === fRes);
     if (fType !== "all") list = list.filter((v) => (v.legislationType || "") === fType);
     if (from) list = list.filter((v) => (v.started || "").slice(0, 10) >= from);
     if (to) list = list.filter((v) => (v.started || "").slice(0, 10) <= to);
+
+    list = [...list].sort((a, b) =>
+      String(b.started || "").localeCompare(String(a.started || ""))
+    );
     return list;
-  }, [data, q, fRes, fType, from, to]);
+  }, [votes, q, fRes, fType, from, to]);
 
-  // analysis (based on filtered set)
-  const analysis = useMemo(() => {
-    const total = filtered.length;
-    const passed = filtered.filter((v) => classifyResult(v.result) === "passed").length;
-    const failed = filtered.filter((v) => classifyResult(v.result) === "failed").length;
-    const other = total - passed - failed;
-    
-    const typeBreakdown = {};
+  const groups = useMemo(() => {
+    const map = new Map();
     for (const v of filtered) {
-      const type = v.legislationType || "Unknown";
-      typeBreakdown[type] = (typeBreakdown[type] || 0) + 1;
+      const type = (v.legislationType || "").trim();
+      const num = String(v.legislationNumber || "").trim();
+      const key = type && num ? `${type}::${num}` : `title::${(v.title || "").trim()}`;
+      if (!map.has(key)) {
+        map.set(key, { key, billType: type || null, billNumber: num || null, title: (v.title || "").trim(), votes: [] });
+      }
+      map.get(key).votes.push(v);
     }
-
-    return { total, passed, failed, other, typeBreakdown };
+    const arr = Array.from(map.values()).map((g) => {
+      const sorted = [...g.votes].sort((a, b) =>
+        String(b.started || "").localeCompare(String(a.started || ""))
+      );
+      return { ...g, latest: sorted[0], votes: sorted };
+    });
+    arr.sort((a, b) =>
+      String(b.latest?.started || "").localeCompare(String(a.latest?.started || ""))
+    );
+    return arr;
   }, [filtered]);
 
-  const setQuickResult = (r) => setFRes((cur) => (cur === r ? "all" : r));
+  if (loading) return <div style={{ padding: 12, color: TOKENS.textMuted }}>Loading voted bills…</div>;
+  if (err) return <div style={{ padding: 12, color: "#B42318" }}>Error: {err}</div>;
 
-  if (loading) return <p>Loading voted bills… (Congress {congress}, Session {session})</p>;
-  if (err) return (
-    <div>
-      <p style={{ color: 'red' }}>Error loading voted bills: {err}</p>
-      <p style={{ fontSize: 12, color: '#666' }}>
-        Trying to fetch: http://127.0.0.1:8000/house/votes?congress={congress}&session={session}&limit=200
-      </p>
-    </div>
-  );
-  if (!data.length) return (
-    <div>
-      <p>No voted bills found.</p>
-      <p style={{ fontSize: 12, color: '#666' }}>
-        Searched Congress {congress}, Session {session}. Make sure the backend is running and has data.
-      </p>
-    </div>
-  );
-
-  const headerLabels = ["Roll", "Bill", "Question", "Result", "Vote Counts", "Date"];
+  const padY = density === "compact" ? 8 : 12;
 
   return (
-    <div style={{ padding: 4 }}>
-      {/* Summary Stats */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 13, marginBottom: 8 }}>
-          <Chip color="#dcfce7" onClick={() => setQuickResult("passed")}>
-            Passed {analysis.passed}
-          </Chip>
-          <Chip color="#fee2e2" onClick={() => setQuickResult("failed")}>
-            Failed {analysis.failed}
-          </Chip>
-          <Chip color="#e5e7eb" onClick={() => setQuickResult("other")}>
-            Other {analysis.other}
-          </Chip>
-          <Chip color="#dbeafe">
-            Total {analysis.total}
-          </Chip>
-        </div>
-        
-        {Object.keys(analysis.typeBreakdown).length > 1 && (
-          <div style={{ fontSize: 12, color: "#666" }}>
-            Bill types: {Object.entries(analysis.typeBreakdown)
-              .sort(([,a], [,b]) => b - a)
-              .map(([type, count]) => `${type} (${count})`)
-              .join(" • ")}
-          </div>
-        )}
-      </div>
-
-      {/* Filters */}
-      <div
-        ref={filtersRef}
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-          background: "white",
-          padding: "8px 0",
-          borderBottom: "1px solid #eee",
-          marginBottom: 8
-        }}
-      >
-        <div style={{ display: "grid", gridTemplateColumns: "1.5fr .8fr .8fr .8fr .8fr", gap: 8, alignItems: "center" }}>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Filter by bill title, question, type, or number…"
-            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" }}
-          />
-          <select value={fRes} onChange={(e) => setFRes(e.target.value)} style={selStyle}>
-            <option value="all">Any result</option>
-            <option value="passed">Passed/Agreed</option>
-            <option value="failed">Failed/Rejected</option>
-            <option value="other">Other</option>
-          </select>
-          <select value={fType} onChange={(e) => setFType(e.target.value)} style={selStyle}>
-            <option value="all">All bill types</option>
-            {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={selStyle} placeholder="From date" />
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={selStyle} placeholder="To date" />
-        </div>
-        <div style={{ marginTop: 6, fontSize: 12, color: "#444" }}>
-          Showing <strong>{filtered.length}</strong> of {data.length} votes
-          {q && <> • search: "{q}"</>}
-          {fRes !== "all" && <> • result: {fRes}</>}
-          {fType !== "all" && <> • type: {fType}</>}
-          {(from || to) && <> • date: {from || "…"}–{to || "…"}</>}
+    <div style={{ background: TOKENS.pageBg, padding: 8, borderRadius: TOKENS.radius }}>
+      {/* Controls */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "minmax(260px,1fr) 180px 160px 150px 150px 120px",
+        gap: 8, alignItems: "center", marginBottom: 8
+      }}>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Filter by title, question, type, or number…"
+          style={inputStyle}
+        />
+        <select value={fRes} onChange={(e) => setFRes(e.target.value)} style={selectStyle}>
+          <option value="all">Any result</option>
+          <option value="passed">Passed/Agreed</option>
+          <option value="failed">Failed/Rejected</option>
+          <option value="other">Other</option>
+        </select>
+        <select value={fType} onChange={(e) => setFType(e.target.value)} style={selectStyle}>
+          <option value="all">All bill types</option>
+          {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={selectStyle} />
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={selectStyle} />
+        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+          <DensityToggle value={density} onChange={setDensity} />
           {(q || fRes !== "all" || fType !== "all" || from || to) && (
-            <> • <button onClick={() => { setQ(""); setFRes("all"); setFType("all"); setFrom(""); setTo(""); }} style={{ border: 0, background: "transparent", color: "#1d4ed8", textDecoration: "underline", cursor: "pointer" }}>reset</button></>
+            <button
+              onClick={() => { setQ(""); setFRes("all"); setFType("all"); setFrom(""); setTo(""); }}
+              style={secBtn}
+              title="Clear all filters"
+            >
+              Reset
+            </button>
           )}
         </div>
       </div>
 
-      {filtered.length === 0 ? (
-        <p>No votes match your filters.</p>
-      ) : (
-        <div ref={scrollRef} style={{ overflowX: "auto", position: "relative" }}>
+      {/* Summary line */}
+      <div style={{ margin: "6px 2px 10px", fontSize: 12, color: TOKENS.textMuted }}>
+        Showing <strong>{groups.reduce((acc, g) => acc + g.votes.length, 0)}</strong> votes across{" "}
+        <strong>{groups.length}</strong> bills
+      </div>
 
-          {/* The real table (non-sticky header kept for semantics & measuring) */}
-          <table
-            ref={tableRef}
-            cellPadding={6}
-            style={{
-              borderCollapse: "separate",
-              borderSpacing: 0,
-              width: "100%"
-            }}
-          >
-            <thead ref={theadRef}>
-              <tr>
-                {headerLabels.map((h) => (
-                  <th key={h} align="left" style={{ fontWeight: 700 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((v) => (
-                <tr key={`${v.congress}-${v.session}-${v.roll}`} style={{ borderTop: "1px solid #f1f5f9" }}>
-                  <td>
+      {/* Groups */}
+      <div style={{ display: "grid", gap: 10 }}>
+        {groups.map((g) => {
+          const latestCounts = getCounts(g.latest || {});
+          const isOpen = open.has(g.key);
+          return (
+            <div
+              key={g.key}
+              style={{
+                background: TOKENS.cardBg,
+                border: `1px solid ${TOKENS.border}`,
+                borderRadius: TOKENS.radius,
+                boxShadow: TOKENS.shadow,
+                overflow: "hidden",
+              }}
+            >
+              {/* Header row */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "28px minmax(260px,1fr) 340px 1fr 150px",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: `${padY}px 12px`,
+                  borderBottom: `1px solid ${TOKENS.borderSubtle}`,
+                }}
+              >
+                <button
+                  onClick={() => {
+                    const n = new Set(open);
+                    if (n.has(g.key)) n.delete(g.key); else n.add(g.key);
+                    setOpen(n);
+                  }}
+                  title={isOpen ? "Hide roll calls" : "Show roll calls"}
+                  style={chevBtn}
+                >
+                  {isOpen ? "▾" : "▸"}
+                </button>
+
+                <div style={{ minWidth: 0 }}>
+                  {g.billType && g.billNumber ? (
                     <button
-                      onClick={() => onSelectVote && onSelectVote({
-                        congress: v.congress,
-                        session: v.session,
-                        roll: v.roll
+                      onClick={() => onSelectBill?.({
+                        congress,
+                        billType: g.billType.toLowerCase(),
+                        billNumber: g.billNumber
                       })}
-                      style={{ 
-                        color: "#1d4ed8", 
-                        textDecoration: "underline",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: 0,
-                        font: "inherit"
-                      }}
-                      title="View vote details"
+                      style={titleLink}
                     >
-                      #{v.roll}
+                      {g.title || `${g.billType} ${g.billNumber}`}
                     </button>
-                  </td>
-                  <td>
-                    {v.legislationType && v.legislationNumber ? (
-                      <button
-                        onClick={() => onSelectBill && onSelectBill({
-                          congress: v.congress,
-                          billType: (v.legislationType || "").toLowerCase().replace(/\s+/g, ""),
-                          billNumber: String(v.legislationNumber || "")
+                  ) : (
+                    <span style={{ color: TOKENS.text }}>{g.title || "(Untitled bill)"}</span>
+                  )}
+                  <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    {g.billType && g.billNumber && (
+                      <span style={miniTag}>{g.billType} {g.billNumber}</span>
+                    )}
+                    {g.latest?.started && (
+                      <span style={miniMuted}>{String(g.latest.started).slice(0,10)}</span>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <ResultBadge result={g.latest?.result} />
+                  <Counts c={latestCounts} />
+                </div>
+
+                {/* tiny outcome spark */}
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                  {g.votes.slice(0, 8).map((v) => (
+                    <span key={v.roll} title={`#${v.roll} • ${v.question || ""}`} style={{
+                      width: 9, height: 9, borderRadius: 2, display: "inline-block",
+                      background:
+                        classifyResult(v.result) === "passed" ? "#86efac" :
+                        classifyResult(v.result) === "failed" ? "#fca5a5" : "#d1d5db"
+                    }} />
+                  ))}
+                  {g.votes.length > 8 && (
+                    <span style={{ color: TOKENS.textMuted, fontSize: 12 }}>+{g.votes.length - 8}</span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    onClick={() => {
+                      const v = g.latest; if (!v) return;
+                      onSelectVote?.({
+                        congress, session, roll: v.roll,
+                        title: v.title,
+                        legislationType: v.legislationType,
+                        legislationNumber: v.legislationNumber
+                      });
+                    }}
+                    style={primaryBtn}
+                  >
+                    Open latest roll
+                  </button>
+                </div>
+              </div>
+
+              {/* Expanded table */}
+              {isOpen && (
+                <div style={{ padding: 10, background: "#FBFCFE" }}>
+                  <div style={{ overflowX: "auto" }}>
+                    <table cellPadding={0} style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
+                      <thead style={{ position: "sticky", top: 0, background: "#FBFCFE", zIndex: 1 }}>
+                        <tr>
+                          {["Roll", "Question", "Result", "Counts", "Date", ""].map((h, i) => (
+                            <th key={i} align={i === 5 ? "right" : "left"} style={headCell}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.votes.map((v, idx) => {
+                          const c = getCounts(v);
+                          const zebra = idx % 2 === 1 ? { background: "#F7F9FD" } : null;
+                          return (
+                            <tr key={v.roll} style={{ borderTop: `1px solid ${TOKENS.borderSubtle}`, ...zebra }}>
+                              <td style={cell}>#{v.roll}</td>
+                              <td style={{ ...cell, minWidth: 280 }}>{v.question || "—"}</td>
+                              <td style={cell}><ResultBadge result={v.result} /></td>
+                              <td style={cell}><Counts c={c} /></td>
+                              <td style={cell}>{String(v.started || "").slice(0,10)}</td>
+                              <td style={{ ...cell, textAlign: "right" }}>
+                                <button
+                                  onClick={() => onSelectVote?.({ congress, session, roll: v.roll, title: v.title })}
+                                  style={rowBtn}
+                                >
+                                  Open roll
+                                </button>
+                              </td>
+                            </tr>
+                          );
                         })}
-                        style={{ 
-                          color: "#1d4ed8", 
-                          textDecoration: "underline",
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          padding: 0,
-                          font: "inherit",
-                          textAlign: "left",
-                          lineHeight: 1.3
-                        }}
-                        title="View bill details"
-                      >
-                        {v.title ? (
-                          <div>
-                            <div style={{ fontWeight: 600, marginBottom: 2 }}>
-                              {v.title}
-                            </div>
-                            <div style={{ fontSize: 12, color: "#666", fontWeight: 400 }}>
-                              {v.legislationType} {v.legislationNumber}
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={{ fontWeight: 600 }}>
-                            {v.legislationType} {v.legislationNumber}
-                          </div>
-                        )}
-                      </button>
-                    ) : (
-                      <span style={{ color: "#666" }}>No bill info</span>
-                    )}
-                  </td>
-                  <td style={{ fontSize: 13 }}>{v.question || "—"}</td>
-                  <td>
-                    <span style={{
-                      padding: "2px 6px",
-                      background: classifyResult(v.result) === 'passed' ? '#dcfce7'
-                               : classifyResult(v.result) === 'failed' ? '#fee2e2'
-                               : '#f3f4f6',
-                      borderRadius: 6,
-                      display: "inline-block",
-                      fontSize: 12,
-                      fontWeight: 600
-                    }}>
-                      {v.result || "—"}
-                    </span>
-                  </td>
-                  <td style={{ fontSize: 12 }}>
-                    <span style={{ color: "#059669" }}>Y: {v.yeaCount || 0}</span>
-                    {" • "}
-                    <span style={{ color: "#dc2626" }}>N: {v.nayCount || 0}</span>
-                    {(v.presentCount > 0 || v.notVotingCount > 0) && (
-                      <>
-                        {" • "}
-                        <span style={{ color: "#6b7280" }}>
-                          P: {v.presentCount || 0} • NV: {v.notVotingCount || 0}
-                        </span>
-                      </>
-                    )}
-                  </td>
-                  <td style={{ fontSize: 12, color: "#666" }}>
-                    {v.started?.slice(0,10) ?? '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-const selStyle = { padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" };
 
-function Chip({ children, color = "#eef2ff", onClick, title }) {
+function DensityToggle({ value, onChange }) {
   return (
-    <button
-      title={title}
-      onClick={onClick}
-      style={{
-        border: "1px solid #e5e7eb",
-        background: color,
-        borderRadius: 999,
-        padding: "4px 10px",
-        cursor: onClick ? "pointer" : "default",
-        fontWeight: 600,
-        fontSize: 12
-      }}
-    >
-      {children}
-    </button>
+    <div style={{ display: "inline-flex", border: `1px solid ${TOKENS.border}`, borderRadius: 999, overflow: "hidden" }}>
+      {["compact", "comfortable"].map((opt) => {
+        const active = value === opt;
+        return (
+          <button
+            key={opt}
+            onClick={() => onChange(opt)}
+            style={{
+              padding: "5px 10px",
+              fontSize: 12,
+              background: active ? "#EEF2FF" : "#FFFFFF",
+              color: active ? "#1D4ED8" : TOKENS.text,
+              border: "none",
+              cursor: "pointer"
+            }}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
   );
 }
+
+
+const inputStyle = {
+  padding: "10px 12px",
+  borderRadius: 8,
+  border: `1px solid ${TOKENS.border}`,
+  background: "#fff",
+};
+
+const selectStyle = { ...inputStyle };
+
+const primaryBtn = {
+  border: `1px solid ${TOKENS.btn.primaryBg}`,
+  background: TOKENS.btn.primaryBg,
+  color: TOKENS.btn.primaryFg,
+  borderRadius: 8,
+  padding: "8px 12px",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+const secBtn = {
+  border: `1px solid ${TOKENS.btn.secondaryBorder}`,
+  background: "#fff",
+  color: TOKENS.text,
+  borderRadius: 8,
+  padding: "8px 12px",
+  cursor: "pointer",
+};
+const rowBtn = { ...secBtn, padding: "6px 10px" };
+
+const chevBtn = {
+  height: 28, width: 28, borderRadius: 8,
+  border: `1px solid ${TOKENS.border}`, background: "#fff", cursor: "pointer"
+};
+
+const titleLink = {
+  border: 0, background: "transparent", padding: 0, cursor: "pointer",
+  color: "#1D4ED8", textDecoration: "underline", fontSize: 15, fontWeight: 600, textAlign: "left"
+};
+
+const miniTag = {
+  borderRadius: 6, padding: "2px 6px", fontSize: 11,
+  background: "#F3F4F6", color: "#374151", border: `1px solid ${TOKENS.border}`
+};
+const miniMuted = { fontSize: 12, color: TOKENS.textMuted };
+
+const headCell = {
+  textAlign: "left",
+  fontWeight: 700,
+  fontSize: 12,
+  color: "#344054",
+  padding: "10px 12px",
+  borderBottom: `1px solid ${TOKENS.border}`,
+};
+const cell = {
+  padding: "10px 12px",
+  color: TOKENS.text,
+  fontSize: 13,
+};
+
+

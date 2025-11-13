@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { PoliticalTermTooltip, OddsExplainer } from "./EducationalTooltip";
+import { PoliticalTermTooltip, OddsExplainer } from "../src/EducationalTooltip";
 
 export default function BettingMarkets({ onSelectMarket }) {
   const [markets, setMarkets] = useState([]);

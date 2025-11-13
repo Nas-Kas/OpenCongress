@@ -1,6 +1,41 @@
-import { useEffect, useMemo, useState, useLayoutEffect, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-// classify result strings so we can filter / analyze
+/* ================= UI tokens ================= */
+const TOKENS = {
+  radius: 10,
+  border: "#E5E7EB",
+  borderSubtle: "#EEF2F7",
+  text: "#111827",
+  textMuted: "#6B7280",
+  cardBg: "#FFFFFF",
+  pageBg: "#F7F9FC",
+  shadow: "0 1px 2px rgba(0,0,0,0.04), 0 6px 16px rgba(0,0,0,0.04)",
+  badge: {
+    passBg: "#E9F8EE",
+    passFg: "#0B7A45",
+    failBg: "#FDECEC",
+    failFg: "#B42318",
+    otherBg: "#F2F4F7",
+    otherFg: "#344054",
+    yBg: "#EAF8F0",
+    yFg: "#15803D",
+    nBg: "#FDEEEE",
+    nFg: "#B91C1C",
+    pBg: "#F2F4F7",
+    pFg: "#475467",
+    nvBg: "#FEF6E7",
+    nvFg: "#92400E",
+  },
+  btn: {
+    primaryBg: "#2563EB",
+    primaryBgHover: "#1E4ED8",
+    primaryFg: "#FFFFFF",
+    secondaryBorder: "#E5E7EB",
+    secondaryHover: "#F8FAFC",
+  },
+};
+
+/* ================= helpers ================= */
 function classifyResult(result) {
   const s = (result || "").toLowerCase();
   if (s.includes("pass") || s.includes("agreed")) return "passed";
@@ -8,7 +43,141 @@ function classifyResult(result) {
   return "other";
 }
 
-export default function MemberPage({ bioguideId, congress = 119, session = 1 }) {
+function ResultBadge({ result }) {
+  const cls = classifyResult(result);
+  const bg =
+    cls === "passed" ? TOKENS.badge.passBg :
+    cls === "failed" ? TOKENS.badge.failBg : TOKENS.badge.otherBg;
+  const fg =
+    cls === "passed" ? TOKENS.badge.passFg :
+    cls === "failed" ? TOKENS.badge.failFg : TOKENS.badge.otherFg;
+  return (
+    <span style={{
+      background: bg, color: fg, padding: "4px 10px",
+      borderRadius: 999, fontSize: 12, fontWeight: 700
+    }}>
+      {result || "—"}
+    </span>
+  );
+}
+
+function PositionChip({ pos }) {
+  const bg =
+    pos === "Yea" ? TOKENS.badge.yBg :
+    pos === "Nay" ? TOKENS.badge.nBg :
+    pos === "Present" ? TOKENS.badge.pBg :
+    TOKENS.badge.nvBg;
+  const fg =
+    pos === "Yea" ? TOKENS.badge.yFg :
+    pos === "Nay" ? TOKENS.badge.nFg :
+    pos === "Present" ? TOKENS.badge.pFg :
+    TOKENS.badge.nvFg;
+
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      background: bg,
+      color: fg,
+      borderRadius: 999,
+      padding: "2px 10px",
+      fontSize: 12,
+      fontWeight: 700,
+    }}>
+      {pos || "—"}
+    </span>
+  );
+}
+
+function getCounts(v = {}) {
+  if (v.counts && typeof v.counts === "object") return v.counts;
+  return {
+    yea: v.yeaCount ?? 0,
+    nay: v.nayCount ?? 0,
+    present: v.presentCount ?? 0,
+    notVoting: v.notVotingCount ?? 0,
+  };
+}
+
+function CountChip({ label, value, bg, fg }) {
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      background: bg,
+      color: fg,
+      borderRadius: 999,
+      padding: "2px 10px",
+      fontSize: 12,
+      fontWeight: 700,
+      fontVariantNumeric: "tabular-nums",
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace"
+    }}>
+      <span style={{ opacity: 0.8 }}>{label}</span>
+      <span>{value ?? 0}</span>
+    </span>
+  );
+}
+
+function Counts({ c }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <CountChip label="Y" value={c.yea} bg={TOKENS.badge.yBg} fg={TOKENS.badge.yFg} />
+      <CountChip label="N" value={c.nay} bg={TOKENS.badge.nBg} fg={TOKENS.badge.nFg} />
+      <CountChip label="P" value={c.present} bg={TOKENS.badge.pBg} fg={TOKENS.badge.pFg} />
+      <CountChip label="NV" value={c.notVoting} bg={TOKENS.badge.nvBg} fg={TOKENS.badge.nvFg} />
+    </div>
+  );
+}
+
+/* ================= shared styles ================= */
+const inputStyle = {
+  padding: "10px 12px",
+  borderRadius: 8,
+  border: `1px solid ${TOKENS.border}`,
+  background: "#fff",
+};
+const selectStyle = { ...inputStyle };
+const headCell = {
+  textAlign: "left",
+  fontWeight: 700,
+  fontSize: 12,
+  color: "#344054",
+  padding: "10px 12px",
+  borderBottom: `1px solid ${TOKENS.border}`,
+};
+const cell = {
+  padding: "10px 12px",
+  color: TOKENS.text,
+  fontSize: 13,
+};
+const titleLink = {
+  border: 0, background: "transparent", padding: 0, cursor: "pointer",
+  color: "#1D4ED8", textDecoration: "underline", fontSize: 15, fontWeight: 600, textAlign: "left"
+};
+const miniTag = {
+  borderRadius: 6, padding: "2px 6px", fontSize: 11,
+  background: "#F3F4F6", color: "#374151", border: `1px solid ${TOKENS.border}`
+};
+const miniMuted = { fontSize: 12, color: TOKENS.textMuted };
+const chevBtn = {
+  height: 28, width: 28, borderRadius: 8,
+  border: `1px solid ${TOKENS.border}`, background: "#fff", cursor: "pointer"
+};
+const rowBtn = {
+  border: `1px solid ${TOKENS.btn.secondaryBorder}`,
+  background: "#fff",
+  color: TOKENS.text,
+  borderRadius: 8,
+  padding: "6px 10px",
+  cursor: "pointer",
+  fontWeight: 600,
+};
+
+/* ================= component ================= */
+export default function MemberPage({ bioguideId, congress = 119, session = 1, onOpenRoll }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,93 +190,8 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1 }) 
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
-  const filtersRef = useRef(null);
-  const scrollRef = useRef(null); 
-  const tableRef = useRef(null);
-  const theadRef = useRef(null);
+  const [open, setOpen] = useState(() => new Set()); // group expand/collapse
 
-  const [stickyTop, setStickyTop] = useState(0);
-  const [gridTemplate, setGridTemplate] = useState(""); // CSS grid template columns for overlay
-  const [overlayWidth, setOverlayWidth] = useState(0);  // px; keeps overlay width in sync
-
-  // Measure filter bar height live (so header sits just below it)
-  useLayoutEffect(() => {
-    let raf = 0;
-    const calcTop = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const el = filtersRef.current;
-        if (!el) return;
-        const styles = getComputedStyle(el);
-        const mb = parseFloat(styles.marginBottom) || 0;
-        setStickyTop(el.getBoundingClientRect().height + mb + 1); // +1 buffer
-      });
-    };
-    const ro = "ResizeObserver" in window ? new ResizeObserver(calcTop) : null;
-    if (ro && filtersRef.current) ro.observe(filtersRef.current);
-
-    calcTop();
-    window.addEventListener("resize", calcTop);
-    window.addEventListener("orientationchange", calcTop);
-    return () => {
-      if (ro) ro.disconnect();
-      window.removeEventListener("resize", calcTop);
-      window.removeEventListener("orientationchange", calcTop);
-      cancelAnimationFrame(raf);
-    };
-  }, []);
-
-  // Measure table header column widths and total width for the overlay header
-  useLayoutEffect(() => {
-    if (!data) return;
-
-    let raf = 0;
-    const measure = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const thead = theadRef.current;
-        const table = tableRef.current;
-        if (!thead || !table) return;
-
-        const ths = Array.from(thead.querySelectorAll("th"));
-        if (!ths.length) return;
-
-        const widths = ths.map((th) => Math.ceil(th.getBoundingClientRect().width));
-        const template = widths.map((w) => `${w}px`).join(" ");
-        setGridTemplate(template);
-        setOverlayWidth(Math.ceil(table.getBoundingClientRect().width));
-      });
-    };
-
-    // Run after first paint
-    measure();
-
-    // Watch table/thead for size changes (fonts, scrollbars, content wrap)
-    const roOK = "ResizeObserver" in window;
-    const roTable = roOK ? new ResizeObserver(measure) : null;
-    const roHead  = roOK ? new ResizeObserver(measure) : null;
-    if (roTable && tableRef.current) roTable.observe(tableRef.current);
-    if (roHead && theadRef.current) roHead.observe(theadRef.current);
-
-    // Also on window resizes and horizontal scroll wrapper resizes
-    window.addEventListener("resize", measure);
-    window.addEventListener("orientationchange", measure);
-
-    // If the browser supports font loading events, remeasure on ready
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(measure).catch(() => {});
-    }
-
-    return () => {
-      if (roTable) roTable.disconnect();
-      if (roHead) roHead.disconnect();
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("orientationchange", measure);
-      cancelAnimationFrame(raf);
-    };
-  }, [data]);
-
-  // Fetch data
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
@@ -149,241 +233,293 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1 }) 
     if (fType !== "all") list = list.filter((v) => (v.legislationType || "") === fType);
     if (from) list = list.filter((v) => (v.started || "").slice(0, 10) >= from);
     if (to) list = list.filter((v) => (v.started || "").slice(0, 10) <= to);
+
+    // newest first (per-vote)
+    list = [...list].sort((a, b) =>
+      String(b.started || "").localeCompare(String(a.started || ""))
+    );
     return list;
   }, [votes, q, fPos, fRes, fType, from, to]);
 
-  // analysis (based on filtered set)
-  const analysis = useMemo(() => {
-    const total = filtered.length;
-    const present = filtered.filter((v) => v.position === "Present").length;
-    const notv = filtered.filter((v) => v.position === "Not Voting").length;
-    const yeas = filtered.filter((v) => v.position === "Yea").length;
-    const nays = filtered.filter((v) => v.position === "Nay").length;
-
-    const contested = filtered.filter((v) => v.position === "Yea" || v.position === "Nay");
-    let aligned = 0;
-    for (const v of contested) {
-      const cls = classifyResult(v.result);
-      if (cls === "passed" && v.position === "Yea") aligned++;
-      else if (cls === "failed" && v.position === "Nay") aligned++;
+  // === GROUP BY BILL (same logic as VotedBillsTable) ===
+  const groups = useMemo(() => {
+    const map = new Map();
+    for (const v of filtered) {
+      const type = (v.legislationType || "").trim();
+      const num = String(v.legislationNumber || "").trim();
+      const key = type && num ? `${type}::${num}` : `title::${(v.title || "").trim()}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          billType: type || null,
+          billNumber: num || null,
+          title: (v.title || "").trim(),
+          votes: [],
+        });
+      }
+      map.get(key).votes.push(v);
     }
-    const alignPct = contested.length ? Math.round((aligned / contested.length) * 100) : null;
-    const attendance = total ? Math.round(((total - notv) / total) * 100) : null;
-    const yeaRate = contested.length ? Math.round((yeas / contested.length) * 100) : null;
-
-    return { total, present, notv, yeas, nays, contested: contested.length, aligned, alignPct, attendance, yeaRate };
+    const arr = Array.from(map.values()).map((g) => {
+      const sorted = [...g.votes].sort((a, b) =>
+        String(b.started || "").localeCompare(String(a.started || ""))
+      );
+      return { ...g, latest: sorted[0], votes: sorted };
+    });
+    arr.sort((a, b) =>
+      String(b.latest?.started || "").localeCompare(String(a.latest?.started || ""))
+    );
+    return arr;
   }, [filtered]);
 
-  const setQuickPos = (p) => setFPos((cur) => (cur === p ? "all" : p));
-
-  if (loading) return <p>Loading member…</p>;
-  if (err) return <p style={{ color: 'red' }}>Error: {err}</p>;
-  if (!data) return <p>No data.</p>;
+  if (loading) return <div style={{ padding: 12, color: TOKENS.textMuted }}>Loading member…</div>;
+  if (err) return <div style={{ padding: 12, color: "#B42318" }}>Error: {err}</div>;
+  if (!data) return <div style={{ padding: 12 }}>No data.</div>;
 
   const { profile, stats } = data;
 
-  const headerLabels = ["Roll", "Bill", "Question", "Chamber Result", "Member Vote", "Date"];
+  const setQuickPos = (p) => setFPos((cur) => (cur === p ? "all" : p));
 
   return (
-    <div style={{ padding: 4 }}>
-      {/* Header */}
-      <header style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-        {profile?.imageUrl && (
-          <img
-            src={profile.imageUrl}
-            alt={profile.name}
-            width={56}
-            height={56}
-            style={{ borderRadius: 8 }}
-          />
-        )}
-        <div>
-          <h2 style={{ margin: 0 }}>{profile?.name}</h2>
-          <div style={{ color: '#444' }}>
-            {profile?.party} • {profile?.state} • {profile?.bioguideId}
-          </div>
+    <div style={{ background: TOKENS.pageBg, padding: 8, borderRadius: TOKENS.radius }}>
+      {/* Card header */}
+      <div style={{
+        background: TOKENS.cardBg,
+        border: `1px solid ${TOKENS.border}`,
+        borderRadius: TOKENS.radius,
+        boxShadow: TOKENS.shadow,
+        padding: 12,
+        marginBottom: 10
+      }}>
+        <header style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8 }}>
+          {profile?.imageUrl && (
+            <img
+              src={profile.imageUrl}
+              alt={profile.name}
+              width={56}
+              height={56}
+              style={{ borderRadius: 8 }}
+            />
+          )}
+          <div>
+            <h2 style={{ margin: 0, fontSize: 20 }}>{profile?.name}</h2>
+            <div style={{ color: TOKENS.textMuted }}>
+              {profile?.party} • {profile?.state} • {profile?.bioguideId}
+            </div>
 
-          {/* Clickable chips */}
-          <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", fontSize: 13 }}>
-            <Chip color="#dbeafe" onClick={() => setQuickPos("Yea")}>Yea {stats?.yea ?? 0}</Chip>
-            <Chip color="#fee2e2" onClick={() => setQuickPos("Nay")}>Nay {stats?.nay ?? 0}</Chip>
-            <Chip color="#e5e7eb" onClick={() => setQuickPos("Present")}>Present {stats?.present ?? 0}</Chip>
-            <Chip color="#fef3c7" onClick={() => setQuickPos("Not Voting")}>Not Voting {stats?.notVoting ?? 0}</Chip>
-            {analysis.alignPct !== null && (
-              <Chip color="#ecfccb" title="When the chamber outcome was clear (Passed/Failed), how often did this member vote with the outcome?">
-                Aligned w/ Chamber {analysis.alignPct}%
-              </Chip>
-            )}
-            {analysis.attendance !== null && (
-              <Chip color="#faf5ff" title="Attendance = not 'Not Voting'">
-                Attendance {analysis.attendance}%
-              </Chip>
-            )}
-            {analysis.yeaRate !== null && (
-              <Chip color="#dcfce7" title="Among Yea/Nay votes only">
-                Yea rate {analysis.yeaRate}%
-              </Chip>
-            )}
+            {/* Quick chips */}
+            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", fontSize: 13 }}>
+              <Chip color={TOKENS.badge.yBg} onClick={() => setQuickPos("Yea")}>Yea {stats?.yea ?? 0}</Chip>
+              <Chip color={TOKENS.badge.nBg} onClick={() => setQuickPos("Nay")}>Nay {stats?.nay ?? 0}</Chip>
+              <Chip color={TOKENS.badge.pBg} onClick={() => setQuickPos("Present")}>Present {stats?.present ?? 0}</Chip>
+              <Chip color={TOKENS.badge.nvBg} onClick={() => setQuickPos("Not Voting")}>Not Voting {stats?.notVoting ?? 0}</Chip>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <div
-        ref={filtersRef}
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-          background: "white",
-          padding: "8px 0",
-          borderBottom: "1px solid #eee",
-          marginBottom: 8
-        }}
-      >
-        <div style={{ display: "grid", gridTemplateColumns: "1.2fr .8fr .8fr .8fr .8fr .8fr", gap: 8, alignItems: "center" }}>
+        {/* Filters */}
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(260px,1fr) 160px 160px 150px 150px 120px", gap: 8, alignItems: "center" }}>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Filter by bill title or question…"
-            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" }}
+            style={inputStyle}
           />
-          <select value={fPos} onChange={(e) => setFPos(e.target.value)} style={selStyle}>
+          <select value={fPos} onChange={(e) => setFPos(e.target.value)} style={selectStyle}>
             <option value="all">All positions</option>
             <option value="Yea">Yea</option>
             <option value="Nay">Nay</option>
             <option value="Present">Present</option>
             <option value="Not Voting">Not Voting</option>
           </select>
-          <select value={fRes} onChange={(e) => setFRes(e.target.value)} style={selStyle}>
+          <select value={fRes} onChange={(e) => setFRes(e.target.value)} style={selectStyle}>
             <option value="all">Any result</option>
             <option value="passed">Passed/Agreed</option>
             <option value="failed">Failed/Rejected</option>
             <option value="other">Other</option>
           </select>
-          <select value={fType} onChange={(e) => setFType(e.target.value)} style={selStyle}>
+          <select value={fType} onChange={(e) => setFType(e.target.value)} style={selectStyle}>
             <option value="all">All bill types</option>
             {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={selStyle} />
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={selStyle} />
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={selectStyle} />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={selectStyle} />
         </div>
-        <div style={{ marginTop: 6, fontSize: 12, color: "#444" }}>
-          Showing <strong>{filtered.length}</strong> of {votes.length} votes
+
+        <div style={{ marginTop: 6, fontSize: 12, color: TOKENS.textMuted }}>
+          Showing <strong>{filtered.length}</strong> votes across <strong>{groups.length}</strong> bills
           {q && <> • search: “{q}”</>}
           {fPos !== "all" && <> • position: {fPos}</>}
           {fRes !== "all" && <> • result: {fRes}</>}
           {fType !== "all" && <> • type: {fType}</>}
           {(from || to) && <> • date: {from || "…"}–{to || "…"}</>}
           {(q || fPos !== "all" || fRes !== "all" || fType !== "all" || from || to) && (
-            <> • <button onClick={() => { setQ(""); setFPos("all"); setFRes("all"); setFType("all"); setFrom(""); setTo(""); }} style={{ border: 0, background: "transparent", color: "#1d4ed8", textDecoration: "underline", cursor: "pointer" }}>reset</button></>
+            <> • <button
+              onClick={() => { setQ(""); setFPos("all"); setFRes("all"); setFType("all"); setFrom(""); setTo(""); }}
+              style={{ border: 0, background: "transparent", color: "#1d4ed8", textDecoration: "underline", cursor: "pointer" }}
+            >
+              reset
+            </button></>
           )}
         </div>
       </div>
 
-      {filtered.length === 0 ? (
-        <p>No votes match your filters.</p>
-      ) : (
-        <div ref={scrollRef} style={{ overflowX: "auto", position: "relative" }}>
+      {/* GROUPS (collapsible) */}
+      <div style={{ display: "grid", gap: 10 }}>
+        {groups.map((g) => {
+          const latestCounts = getCounts(g.latest || {});
+          const isOpen = open.has(g.key);
+          // for member context, show *member's* latest position in this bill's rolls
+          const latestMemberPos = g.latest?.position || null;
 
-          {/* The real table (non-sticky header kept for semantics & measuring) */}
-          <table
-            ref={tableRef}
-            cellPadding={6}
-            style={{
-              borderCollapse: "separate",
-              borderSpacing: 0,
-              width: "100%"
-            }}
-          >
-            <thead ref={theadRef}>
-              <tr>
-                {headerLabels.map((h) => (
-                  <th key={h} align="left" style={{ fontWeight: 700 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((v) => (
-                <tr key={v.roll} style={{ borderTop: "1px solid #f1f5f9" }}>
-                  <td>#{v.roll}</td>
-                  <td>
-                    {v.legislationType && v.legislationNumber ? (
-                      <button
-                        onClick={() => {
-                          // Create bill view URL
-                          const billType = (v.legislationType || "").toLowerCase().replace(/\s+/g, "");
-                          const billNumber = String(v.legislationNumber || "");
-                          const congress = 119; // Current congress
-                          
-                          // Navigate to bill view
-                          const url = new URL(window.location);
-                          url.searchParams.set('congress', congress);
-                          url.searchParams.set('billType', billType);
-                          url.searchParams.set('billNumber', billNumber);
-                          url.searchParams.delete('member'); // Remove member param
-                          window.location.href = url.toString();
-                        }}
-                        style={{ 
-                          color: "#1d4ed8", 
-                          textDecoration: "underline",
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          padding: 0,
-                          font: "inherit",
-                          textAlign: "left"
-                        }}
-                      >
-                        {v.title
-                          ? `${v.title} — ${v.legislationType} ${v.legislationNumber}`
-                          : `${v.legislationType ?? ""} ${v.legislationNumber ?? ""}`.trim()}
-                      </button>
-                    ) : (
-                      v.title
-                        ? `${v.title} — ${v.legislationType} ${v.legislationNumber}`
-                        : `${v.legislationType ?? ""} ${v.legislationNumber ?? ""}`.trim()
+          return (
+            <div
+              key={g.key}
+              style={{
+                background: TOKENS.cardBg,
+                border: `1px solid ${TOKENS.border}`,
+                borderRadius: TOKENS.radius,
+                boxShadow: TOKENS.shadow,
+                overflow: "hidden",
+              }}
+            >
+              {/* Group header */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "28px minmax(260px,1fr) 340px 1fr 180px",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "10px 12px",
+                  borderBottom: `1px solid ${TOKENS.borderSubtle}`,
+                }}
+              >
+                <button
+                  onClick={() => {
+                    const n = new Set(open);
+                    if (n.has(g.key)) n.delete(g.key); else n.add(g.key);
+                    setOpen(n);
+                  }}
+                  title={isOpen ? "Hide roll calls" : "Show roll calls"}
+                  style={chevBtn}
+                >
+                  {isOpen ? "▾" : "▸"}
+                </button>
+
+                <div style={{ minWidth: 0 }}>
+                  {g.billType && g.billNumber ? (
+                    <button
+                      onClick={() => {
+                        const url = new URL(window.location);
+                        url.searchParams.set('congress', congress);
+                        url.searchParams.set('billType', g.billType.toLowerCase());
+                        url.searchParams.set('billNumber', g.billNumber);
+                        url.searchParams.delete('member');
+                        window.location.href = url.toString();
+                      }}
+                      style={titleLink}
+                    >
+                      {g.title || `${g.billType} ${g.billNumber}`}
+                    </button>
+                  ) : (
+                    <span style={{ color: TOKENS.text }}>{g.title || "(Untitled bill)"}</span>
+                  )}
+                  <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    {g.billType && g.billNumber && (
+                      <span style={miniTag}>{g.billType} {g.billNumber}</span>
                     )}
-                  </td>
-                  <td>{v.question || ""}</td>
-                  <td>{v.result}</td>
-                  <td>
-                    <span style={{
-                      padding: "2px 6px",
-                      background: v.position === 'Yea' ? '#d1fae5'
-                               : v.position === 'Nay' ? '#fee2e2'
-                               : v.position === 'Present' ? '#e5e7eb'
-                               : '#fef3c7',
-                      borderRadius: 6,
-                      display: "inline-block"
-                    }}>
-                      {v.position || '—'}
-                    </span>
-                  </td>
-                  <td>{v.started?.slice(0,10) ?? ''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                    {g.latest?.started && (
+                      <span style={miniMuted}>{String(g.latest.started).slice(0,10)}</span>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <ResultBadge result={g.latest?.result} />
+                  <Counts c={latestCounts} />
+                </div>
+
+                {/* tiny outcome spark (per chamber outcome) */}
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                  {g.votes.slice(0, 8).map((v) => (
+                    <span key={v.roll} title={`#${v.roll} • ${v.question || ""}`} style={{
+                      width: 9, height: 9, borderRadius: 2, display: "inline-block",
+                      background:
+                        classifyResult(v.result) === "passed" ? "#86efac" :
+                        classifyResult(v.result) === "failed" ? "#fca5a5" : "#d1d5db"
+                    }} />
+                  ))}
+                  {g.votes.length > 8 && (
+                    <span style={{ color: TOKENS.textMuted, fontSize: 12 }}>+{g.votes.length - 8}</span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <PositionChip pos={latestMemberPos} />
+                </div>
+              </div>
+
+              {/* Expanded inner table (member’s roll calls for this bill) */}
+              {isOpen && (
+                <div style={{ padding: 10, background: "#FBFCFE" }}>
+                  <div style={{ overflowX: "auto" }}>
+                    <table cellPadding={0} style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
+                      <thead style={{ position: "sticky", top: 0, background: "#FBFCFE", zIndex: 1 }}>
+                        <tr>
+                          {["Roll", "Question", "Chamber Result", "Member Vote", "Date", ""].map((h, i) => (
+                            <th key={i} align={i === 5 ? "right" : "left"} style={headCell}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.votes.map((v, idx) => {
+                          const zebra = idx % 2 === 1 ? { background: "#F7F9FD" } : null;
+                          return (
+                            <tr key={v.roll} style={{ borderTop: `1px solid ${TOKENS.borderSubtle}`, ...zebra }}>
+                              <td style={cell}>#{v.roll}</td>
+                              <td style={{ ...cell, minWidth: 280 }}>{v.question || "—"}</td>
+                              <td style={cell}><ResultBadge result={v.result} /></td>
+                              <td style={cell}><PositionChip pos={v.position} /></td>
+                              <td style={{ ...cell, whiteSpace: "nowrap" }}>{String(v.started || "").slice(0,10)}</td>
+                              <td style={{ ...cell, textAlign: "right" }}>
+                                {onOpenRoll ? (
+                                  <button
+                                    onClick={() => onOpenRoll({ congress, session: v.session ?? session, roll: v.roll })}
+                                    style={rowBtn}
+                                  >
+                                    Open roll
+                                  </button>
+                                ) : null}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-const selStyle = { padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb" };
-
+/* ================= small bits ================= */
 function Chip({ children, color = "#eef2ff", onClick, title }) {
   return (
     <button
       title={title}
       onClick={onClick}
       style={{
-        border: "1px solid #e5e7eb",
+        border: `1px solid ${TOKENS.border}`,
         background: color,
         borderRadius: 999,
         padding: "4px 10px",
         cursor: onClick ? "pointer" : "default",
-        fontWeight: 600
+        fontWeight: 700,
+        fontSize: 12,
       }}
     >
       {children}
