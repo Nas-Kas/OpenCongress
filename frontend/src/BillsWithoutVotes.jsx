@@ -99,79 +99,35 @@ export default function BillsWithoutVotes() {
 
   if (loading && bills.length === 0) {
     return (
-      <div style={{ 
-        display: "flex", 
-        alignItems: "center", 
-        justifyContent: "center", 
-        padding: 40,
-        gap: 12 
-      }}>
-        <div style={{
-          width: 20,
-          height: 20,
-          border: "2px solid #e5e7eb",
-          borderTop: "2px solid #2563eb",
-          borderRadius: "50%",
-          animation: "spin 1s linear infinite"
-        }} />
+      <div className="flex items-center justify-center p-10 gap-3">
+        <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
         <span>Loading bills without votes...</span>
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div style={{
-        padding: 20,
-        background: "#fef2f2",
-        border: "1px solid #fecaca",
-        borderRadius: 8,
-        color: "#dc2626"
-      }}>
+      <div className="p-5 bg-red-50 border border-red-200 rounded-lg text-red-600">
         <strong>Error loading bills:</strong> {error}
       </div>
     );
   }
 
   return (
-    <div style={{ padding: "16px 20px", maxWidth: "1200px", margin: "0 auto" }}>
+    <div className="px-5 py-4 max-w-6xl mx-auto">
       {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ 
-          margin: "0 0 8px 0", 
-          fontSize: "clamp(20px, 4vw, 28px)",
-          color: "#1f2937"
-        }}>
+      <div className="mb-6">
+        <h1 className="m-0 mb-2 text-2xl lg:text-3xl text-gray-800">
           📋 Early-Stage Bills
         </h1>
-        <p style={{ 
-          margin: 0, 
-          color: "#6b7280", 
-          fontSize: 16,
-          lineHeight: 1.5 
-        }}>
+        <p className="m-0 text-gray-500 text-base leading-relaxed">
           Bills that haven't had House votes yet 
         </p>
       </div>
 
       {/* Filters */}
-      <div style={{
-        background: "#f8fafc",
-        border: "1px solid #e2e8f0",
-        borderRadius: 8,
-        padding: 16,
-        marginBottom: 20,
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-        gap: 16,
-        alignItems: "end"
-      }}>
+      <div className="bg-gray-50 border border-gray-300 rounded-lg p-4 mb-5 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 items-end">
         <div>
           <label style={{ 
             display: "block", 

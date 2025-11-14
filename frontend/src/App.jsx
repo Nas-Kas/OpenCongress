@@ -6,7 +6,7 @@ import MemberPage from "./MemberPage";
 import MemberSearch from "./MemberSearch";
 import BillPage from "./BillPage";
 import BillsWithoutVotes from "./BillsWithoutVotes";
-import "./ui.css";
+
 
 const getQS = () => new URLSearchParams(window.location.search);
 const setQS = (obj) => {
@@ -122,7 +122,7 @@ export default function App() {
 
   if (showBillsWithoutVotes) {
     return (
-      <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
+      <div className="p-4 max-w-6xl mx-auto">
         <NavTabs
           active="bills"
           onChange={(tab) => {
@@ -143,7 +143,7 @@ export default function App() {
   // --- Bill view branch ---
   if (selectedBill) {
     return (
-      <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
+      <div className="p-4 max-w-5xl mx-auto">
         <BillPage
           congress={selectedBill.congress}
           billType={selectedBill.billType}
@@ -162,7 +162,7 @@ export default function App() {
   // --- Member view branch ---
   if (selectedMember) {
     return (
-      <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
+      <div className="p-4 max-w-5xl mx-auto">
         <NavTabs
           active="member"
           onChange={(tab) => {
@@ -179,15 +179,12 @@ export default function App() {
             }
           }}
         />
-        <div
-          style={{
-            marginBottom: 12,
-            display: "grid",
-            gridTemplateColumns: "auto 1fr",
-            gap: 12,
-          }}
-        >
-          <button type="button" onClick={() => setSelectedMember(null)}>
+        <div className="mb-3 grid grid-cols-[auto_1fr] gap-3">
+          <button 
+            type="button" 
+            onClick={() => setSelectedMember(null)}
+            className="px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 cursor-pointer"
+          >
             ← Back to Roll Calls
           </button>
           <MemberSearch
@@ -214,7 +211,7 @@ export default function App() {
     billId;
 
   return (
-    <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
+    <div className="p-4 max-w-5xl mx-auto">
       <NavTabs
         active={activeTab}
         onChange={(tab) => {
@@ -229,46 +226,27 @@ export default function App() {
         }}
       />
 
-      <div style={{ marginTop: 8, marginBottom: 16 }}>
-        <h1 style={{ margin: "0 0 8px 0" }}>🗳️ House Roll-Call Votes</h1>
-        <p
-          style={{
-            margin: 0,
-            color: "#6b7280",
-            fontSize: 14,
-            lineHeight: 1.4,
-          }}
-        >
+      <div className="mt-2 mb-4">
+        <h1 className="m-0 mb-2 text-2xl font-bold">🗳️ House Roll-Call Votes</h1>
+        <p className="m-0 text-gray-500 text-sm leading-relaxed">
           Bills that have been voted on by the House. For bills that haven't
           been voted on yet, check the "📋 Early Bills" tab.
         </p>
       </div>
 
       {/* View toggle */}
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          alignItems: "center",
-          marginBottom: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "flex", gap: 4 }}>
+      <div className="flex gap-3 items-center mb-4 flex-wrap">
+        <div className="flex gap-1">
           <button
             onClick={() => {
               setShowVotedBillsList(true);
               setSelectedVote(null);
             }}
-            style={{
-              padding: "8px 12px",
-              borderRadius: 8,
-              background: showVotedBillsList ? "#eef2ff" : "transparent",
-              color: showVotedBillsList ? "#1d4ed8" : "#111",
-              border: "1px solid #e5e7eb",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
+            className={`px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${
+              showVotedBillsList 
+                ? "bg-primary-weak text-primary" 
+                : "bg-transparent text-gray-900"
+            }`}
           >
             📊 Vote Overview
           </button>
@@ -278,20 +256,16 @@ export default function App() {
               if (!selectedVote)
                 setSelectedVote({ congress: 119, session: 1, roll: 1 });
             }}
-            style={{
-              padding: "8px 12px",
-              borderRadius: 8,
-              background: !showVotedBillsList ? "#eef2ff" : "transparent",
-              color: !showVotedBillsList ? "#1d4ed8" : "#111",
-              border: "1px solid #e5e7eb",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
+            className={`px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${
+              !showVotedBillsList 
+                ? "bg-primary-weak text-primary" 
+                : "bg-transparent text-gray-900"
+            }`}
           >
             👥 Vote by Member
           </button>
         </div>
-        <div style={{ flex: 1 }}>
+        <div className="flex-1">
           <MemberSearch
             onSelect={(id) => id && setSelectedMember(id.toUpperCase())}
           />
@@ -315,7 +289,7 @@ export default function App() {
         />
       ) : (
         <>
-          <div style={{ marginBottom: 16 }}>
+          <div className="mb-4">
             <VotePicker
               onSelect={(payload) => {
                 setSelectedVote(payload);
@@ -326,28 +300,33 @@ export default function App() {
           </div>
 
           {error && (
-            <p style={{ color: "red", marginTop: 12 }}>Error: {error}</p>
+            <p className="text-red-600 mt-3">Error: {error}</p>
           )}
 
           {!selectedVote ? (
-            <p style={{ marginTop: 16, color: "#444" }}>
+            <p className="mt-4 text-gray-700">
               Select a vote to see details.
             </p>
           ) : loadingVotes ? (
-            <p style={{ marginTop: 16 }}>Loading vote details…</p>
+            <p className="mt-4">Loading vote details…</p>
           ) : rows.length === 0 ? (
-            <p style={{ marginTop: 16 }}>No ballots found for this vote.</p>
+            <p className="mt-4">No ballots found for this vote.</p>
           ) : (
-            <div style={{ marginTop: 16 }}>
+            <div className="mt-4">
               {meta && (
-                <div style={{ marginBottom: 8, fontSize: 14 }}>
-                  <span style={{ fontStyle: "italic" }}>{displayQuestion}</span>{" "}
+                <div className="mb-2 text-sm">
+                  <span className="italic">{displayQuestion}</span>{" "}
                   — <strong>{billId}</strong> — <span>{displayTitle}</span>
                   {" • "}Result: <em>{meta.result}</em>{" "}
                   {meta.source && (
                     <>
                       •{" "}
-                      <a href={meta.source} target="_blank" rel="noreferrer">
+                      <a 
+                        href={meta.source} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="text-primary underline hover:text-blue-800"
+                      >
                         Clerk source
                       </a>
                     </>
@@ -359,6 +338,7 @@ export default function App() {
                         href={meta.legislationUrl}
                         target="_blank"
                         rel="noreferrer"
+                        className="text-primary underline hover:text-blue-800"
                       >
                         Congress.gov page
                       </a>
@@ -382,7 +362,7 @@ export default function App() {
               )}
 
               {counts && (
-                <div style={{ marginBottom: 8, fontSize: 13, color: "#444" }}>
+                <div className="mb-2 text-xs text-gray-700">
                   Yea: {counts.yea} · Nay: {counts.nay} · Present:{" "}
                   {counts.present} · Not Voting: {counts.notVoting}
                 </div>
@@ -403,31 +383,27 @@ export default function App() {
 }
 
 function NavTabs({ active = "rolls", onChange }) {
-  const tabStyle = (isActive) => ({
-    padding: "8px 12px",
-    borderRadius: 8,
-    background: isActive ? "#eef2ff" : "transparent",
-    color: isActive ? "#1d4ed8" : "#111",
-    border: "1px solid #e5e7eb",
-    cursor: "pointer",
-    fontWeight: 600,
-  });
+  const getTabClasses = (isActive) => 
+    `px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${
+      isActive ? "bg-primary-weak text-primary" : "bg-transparent text-gray-900"
+    }`;
+  
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <div className="flex gap-2 flex-wrap">
       <button
-        style={tabStyle(active === "rolls")}
+        className={getTabClasses(active === "rolls")}
         onClick={() => onChange?.("rolls")}
       >
         🗳️ Voted Bills
       </button>
       <button
-        style={tabStyle(active === "member")}
+        className={getTabClasses(active === "member")}
         onClick={() => onChange?.("member")}
       >
         👤 Member
       </button>
       <button
-        style={tabStyle(active === "bills")}
+        className={getTabClasses(active === "bills")}
         onClick={() => onChange?.("bills")}
       >
         📋 Early Bills

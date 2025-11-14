@@ -8,7 +8,6 @@ export default function VotePicker({ onSelect }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef(null);
 
-  // Adjust congress/session to taste
   const CONGRESS = 119;
   const SESSION = 1;
 
@@ -68,18 +67,13 @@ export default function VotePicker({ onSelect }) {
   };
 
   return (
-    <div ref={boxRef} style={{ position: "relative", width: "100%" }}>
+    <div ref={boxRef} className="relative w-full">
       <input
         value={query}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         placeholder="Search roll calls by bill/question…"
-        style={{
-          width: "100%",
-          padding: "8px 10px",
-          borderRadius: 8,
-          border: "1px solid #e5e7eb",
-        }}
+        className="w-full px-2.5 py-2 rounded-lg border border-gray-300"
       />
       {open && (
         <div

@@ -2,19 +2,27 @@ import { useMemo, useState } from "react";
 
 function VoteChip({ pos }) {
   const p = pos || "—";
-  const classMap = {
-    Yea: "badge-yea",
-    Nay: "badge-nay",
-    Present: "badge-present",
-    "Not Voting": "badge-nv",
-    "—": "badge-present",
+  const getVoteClasses = (vote) => {
+    const baseClasses = "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold";
+    switch (vote) {
+      case "Yea":
+        return `${baseClasses} bg-vote-yea-bg text-vote-yea-fg`;
+      case "Nay":
+        return `${baseClasses} bg-vote-nay-bg text-vote-nay-fg`;
+      case "Present":
+        return `${baseClasses} bg-vote-present-bg text-vote-present-fg`;
+      case "Not Voting":
+        return `${baseClasses} bg-vote-nv-bg text-vote-nv-fg`;
+      default:
+        return `${baseClasses} bg-vote-present-bg text-vote-present-fg`;
+    }
   };
 
   return (
     <span
       aria-label={`Vote: ${p}`}
       title={`Vote: ${p}`}
-      className={`vote-chip ${classMap[p]}`}
+      className={getVoteClasses(p)}
     >
       {p}
     </span>
@@ -70,45 +78,45 @@ export default function VotesTable({ rows = [], onOpenMember }) {
   };
 
   return (
-    <div className="votes-card">
-      <div className="votes-header">
+    <div className="bg-white border border-gray-300 rounded-lg shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-300 bg-blue-50 text-sm text-gray-600">
         Showing <strong>{rows.length}</strong> members
       </div>
 
-      <div className="votes-table-wrap">
-        <table className="votes-table">
+      <div className="overflow-x-auto">
+        <table className="w-full border-separate border-spacing-0">
           <thead>
             <tr>
-              <th aria-sort={ariaSort("name")} className="votes-th">
+              <th aria-sort={ariaSort("name")} className="text-left font-bold text-xs text-gray-800 px-3 py-2.5 border-b border-gray-300 bg-gray-50 sticky top-0 z-10">
                 <button
-                  className="votes-sort-btn"
+                  className="bg-transparent border-0 p-0 m-0 cursor-pointer font-inherit inline-flex items-center gap-1.5"
                   onClick={() => setSort("name")}
                   title="Sort by Member"
                 >
                   Member <span>{sortIndicator("name")}</span>
                 </button>
               </th>
-              <th aria-sort={ariaSort("party")} className="votes-th">
+              <th aria-sort={ariaSort("party")} className="text-left font-bold text-xs text-gray-800 px-3 py-2.5 border-b border-gray-300 bg-gray-50 sticky top-0 z-10">
                 <button
-                  className="votes-sort-btn"
+                  className="bg-transparent border-0 p-0 m-0 cursor-pointer font-inherit inline-flex items-center gap-1.5"
                   onClick={() => setSort("party")}
                   title="Sort by Party"
                 >
                   Party <span>{sortIndicator("party")}</span>
                 </button>
               </th>
-              <th aria-sort={ariaSort("state")} className="votes-th">
+              <th aria-sort={ariaSort("state")} className="text-left font-bold text-xs text-gray-800 px-3 py-2.5 border-b border-gray-300 bg-gray-50 sticky top-0 z-10">
                 <button
-                  className="votes-sort-btn"
+                  className="bg-transparent border-0 p-0 m-0 cursor-pointer font-inherit inline-flex items-center gap-1.5"
                   onClick={() => setSort("state")}
                   title="Sort by State"
                 >
                   State <span>{sortIndicator("state")}</span>
                 </button>
               </th>
-              <th aria-sort={ariaSort("position")} className="votes-th">
+              <th aria-sort={ariaSort("position")} className="text-left font-bold text-xs text-gray-800 px-3 py-2.5 border-b border-gray-300 bg-gray-50 sticky top-0 z-10">
                 <button
-                  className="votes-sort-btn"
+                  className="bg-transparent border-0 p-0 m-0 cursor-pointer font-inherit inline-flex items-center gap-1.5"
                   onClick={() => setSort("position")}
                   title="Sort by Vote"
                 >
@@ -120,20 +128,20 @@ export default function VotesTable({ rows = [], onOpenMember }) {
 
           <tbody>
             {sortedRows.map((m, idx) => (
-              <tr key={m.bioguideId ?? idx} className="votes-row">
-                <td className="votes-td name-cell">
+              <tr key={m.bioguideId ?? idx} className="border-t border-gray-300 odd:bg-blue-50 hover:bg-blue-100">
+                <td className="px-3 py-2.5 text-gray-900 text-sm min-w-[220px]">
                   <button
                     type="button"
                     onClick={() => handleOpenMember(m.bioguideId)}
-                    className="link-button"
+                    className="bg-none border-none text-primary underline cursor-pointer p-0 font-inherit"
                     aria-label={`Open profile for ${m.name}`}
                   >
                     {m.name}
                   </button>
                 </td>
-                <td className="votes-td">{m.party}</td>
-                <td className="votes-td">{m.state}</td>
-                <td className="votes-td">
+                <td className="px-3 py-2.5 text-gray-900 text-sm">{m.party}</td>
+                <td className="px-3 py-2.5 text-gray-900 text-sm">{m.state}</td>
+                <td className="px-3 py-2.5 text-gray-900 text-sm">
                   <VoteChip pos={m.position} />
                 </td>
               </tr>
