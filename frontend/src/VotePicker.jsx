@@ -76,26 +76,12 @@ export default function VotePicker({ onSelect }) {
         className="w-full px-2.5 py-2 rounded-lg border border-gray-300"
       />
       {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            right: 0,
-            zIndex: 30,
-            background: "white",
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-            marginTop: 6,
-            maxHeight: 320,
-            overflow: "auto",
-            boxShadow: "0 8px 24px rgba(0,0,0,.08)",
-          }}
+        <div className="absolute top-full left-0 right-0 z-30 bg-white border border-gray-300 rounded-lg mt-1.5 max-h-80 overflow-auto shadow-lg"
         >
-          {loading && <div style={{ padding: 10, fontSize: 13 }}>Loading…</div>}
-          {err && <div style={{ padding: 10, fontSize: 13, color: "red" }}>Error: {err}</div>}
+          {loading && <div className="p-2.5 text-xs">Loading…</div>}
+          {err && <div className="p-2.5 text-xs text-red-600">Error: {err}</div>}
           {!loading && !err && filtered.length === 0 && (
-            <div style={{ padding: 10, fontSize: 13, color: "#666" }}>No matches</div>
+            <div className="p-2.5 text-xs text-gray-600">No matches</div>
           )}
           {!loading && !err && filtered.map((v) => {
             const billId = `${v.legislationType} ${v.legislationNumber}`;
@@ -105,22 +91,13 @@ export default function VotePicker({ onSelect }) {
               <button
                 key={`${v.congress}-${v.session}-${v.roll}`}
                 onClick={() => choose(v)}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "10px 12px",
-                  background: "white",
-                  border: 0,
-                  borderBottom: "1px solid #f3f4f6",
-                  cursor: "pointer",
-                }}
+                className="block w-full text-left p-2.5 bg-white border-0 border-b border-gray-100 cursor-pointer hover:bg-gray-50"
                 title={`Roll ${v.roll} — ${question} — ${billId} (${v.result ?? "—"})`}
               >
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>
+                <div className="text-sm font-semibold mb-0.5">
                   Roll {v.roll} — {title}
                 </div>
-                <div style={{ fontSize: 12, color: "#555" }}>
+                <div className="text-xs text-gray-600">
                   {question} • {billId} • {v.result ?? "—"}
                 </div>
               </button>

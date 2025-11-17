@@ -1,38 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const TOKENS = {
-  radius: 10,
-  border: "#E5E7EB",
-  borderSubtle: "#EEF2F7",
-  text: "#111827",
-  textMuted: "#6B7280",
-  cardBg: "#FFFFFF",
-  pageBg: "#F7F9FC",
-  shadow: "0 1px 2px rgba(0,0,0,0.04), 0 6px 16px rgba(0,0,0,0.04)",
-  badge: {
-    passBg: "#E9F8EE",
-    passFg: "#0B7A45",
-    failBg: "#FDECEC",
-    failFg: "#B42318",
-    otherBg: "#F2F4F7",
-    otherFg: "#344054",
-    yBg: "#EAF8F0",
-    yFg: "#15803D",
-    nBg: "#FDEEEE",
-    nFg: "#B91C1C",
-    pBg: "#F2F4F7",
-    pFg: "#475467",
-    nvBg: "#FEF6E7",
-    nvFg: "#92400E",
-  },
-  btn: {
-    primaryBg: "#2563EB",
-    primaryBgHover: "#1E4ED8",
-    primaryFg: "#FFFFFF",
-    secondaryBorder: "#E5E7EB",
-    secondaryHover: "#F8FAFC",
-  },
-};
+
 
 
 function classifyResult(result) {
@@ -54,38 +22,31 @@ function getCounts(v = {}) {
 
 function ResultBadge({ result }) {
   const cls = classifyResult(result);
-  const bg =
-    cls === "passed" ? TOKENS.badge.passBg :
-    cls === "failed" ? TOKENS.badge.failBg : TOKENS.badge.otherBg;
-  const fg =
-    cls === "passed" ? TOKENS.badge.passFg :
-    cls === "failed" ? TOKENS.badge.failFg : TOKENS.badge.otherFg;
+  const colorClass =
+    cls === "passed" ? "bg-green-50 text-green-800" :
+      cls === "failed" ? "bg-red-50 text-red-800" : "bg-gray-50 text-gray-800";
+
   return (
-    <span style={{
-      background: bg, color: fg, padding: "4px 10px",
-      borderRadius: 999, fontSize: 12, fontWeight: 700
-    }}>
+    <span className={`${colorClass} px-2.5 py-1 rounded-full text-xs font-bold`}>
       {result || "—"}
     </span>
   );
 }
 
-function CountChip({ label, value, bg, fg }) {
+function CountChip({ label, value }) {
+  const getColorClass = () => {
+    switch (label) {
+      case "Y": return "bg-vote-yea-bg text-vote-yea-fg";
+      case "N": return "bg-vote-nay-bg text-vote-nay-fg";
+      case "P": return "bg-vote-present-bg text-vote-present-fg";
+      case "NV": return "bg-vote-not-voting-bg text-vote-not-voting-fg";
+      default: return "bg-gray-100 text-gray-700";
+    }
+  };
+
   return (
-    <span style={{
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 6,
-      background: bg,
-      color: fg,
-      borderRadius: 999,
-      padding: "2px 10px",
-      fontSize: 12,
-      fontWeight: 700,
-      fontVariantNumeric: "tabular-nums",
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace"
-    }}>
-      <span style={{ opacity: 0.8 }}>{label}</span>
+    <span className={`inline-flex items-center gap-1.5 ${getColorClass()} rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums font-mono`}>
+      <span className="opacity-80">{label}</span>
       <span>{value ?? 0}</span>
     </span>
   );
@@ -93,11 +54,11 @@ function CountChip({ label, value, bg, fg }) {
 
 function Counts({ c }) {
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <CountChip label="Y" value={c.yea} bg={TOKENS.badge.yBg} fg={TOKENS.badge.yFg} />
-      <CountChip label="N" value={c.nay} bg={TOKENS.badge.nBg} fg={TOKENS.badge.nFg} />
-      <CountChip label="P" value={c.present} bg={TOKENS.badge.pBg} fg={TOKENS.badge.pFg} />
-      <CountChip label="NV" value={c.notVoting} bg={TOKENS.badge.nvBg} fg={TOKENS.badge.nvFg} />
+    <div className="flex gap-2 flex-wrap">
+      <CountChip label="Y" value={c.yea} />
+      <CountChip label="N" value={c.nay} />
+      <CountChip label="P" value={c.present} />
+      <CountChip label="NV" value={c.notVoting} />
     </div>
   );
 }
@@ -119,6 +80,8 @@ export default function VotedBillsTable({
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [density, setDensity] = useState("compact"); // "compact" | "comfortable"
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   const [open, setOpen] = useState(() => new Set());
 
@@ -170,7 +133,7 @@ export default function VotedBillsTable({
     return list;
   }, [votes, q, fRes, fType, from, to]);
 
-  const groups = useMemo(() => {
+  const allGroups = useMemo(() => {
     const map = new Map();
     for (const v of filtered) {
       const type = (v.legislationType || "").trim();
@@ -193,43 +156,51 @@ export default function VotedBillsTable({
     return arr;
   }, [filtered]);
 
-  if (loading) return <div style={{ padding: 12, color: TOKENS.textMuted }}>Loading voted bills…</div>;
-  if (err) return <div style={{ padding: 12, color: "#B42318" }}>Error: {err}</div>;
+  const paginatedGroups = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return allGroups.slice(startIndex, endIndex);
+  }, [allGroups, currentPage, itemsPerPage]);
 
-  const padY = density === "compact" ? 8 : 12;
+  const totalPages = Math.ceil(allGroups.length / itemsPerPage);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [q, fRes, fType, from, to]);
+
+  if (loading) return <div className="p-3 text-gray-500">Loading voted bills…</div>;
+  if (err) return <div className="p-3 text-red-600">Error: {err}</div>;
+
 
   return (
-    <div style={{ background: TOKENS.pageBg, padding: 8, borderRadius: TOKENS.radius }}>
+    <div className="bg-gray-50 p-2 rounded-lg">
       {/* Controls */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(260px,1fr) 180px 160px 150px 150px 120px",
-        gap: 8, alignItems: "center", marginBottom: 8
-      }}>
+      <div className="grid grid-cols-[minmax(260px,1fr)_180px_160px_150px_150px_120px] gap-2 items-center mb-2">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Filter by title, question, type, or number…"
-          style={inputStyle}
+          className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white"
         />
-        <select value={fRes} onChange={(e) => setFRes(e.target.value)} style={selectStyle}>
+        <select value={fRes} onChange={(e) => setFRes(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white">
           <option value="all">Any result</option>
           <option value="passed">Passed/Agreed</option>
           <option value="failed">Failed/Rejected</option>
           <option value="other">Other</option>
         </select>
-        <select value={fType} onChange={(e) => setFType(e.target.value)} style={selectStyle}>
+        <select value={fType} onChange={(e) => setFType(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white">
           <option value="all">All bill types</option>
           {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={selectStyle} />
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={selectStyle} />
-        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white" />
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white" />
+        <div className="flex gap-1.5 justify-end">
           <DensityToggle value={density} onChange={setDensity} />
           {(q || fRes !== "all" || fType !== "all" || from || to) && (
             <button
               onClick={() => { setQ(""); setFRes("all"); setFType("all"); setFrom(""); setTo(""); }}
-              style={secBtn}
+              className="border border-gray-300 bg-white text-gray-900 rounded-lg px-2 py-2 cursor-pointer"
               title="Clear all filters"
             >
               Reset
@@ -239,37 +210,45 @@ export default function VotedBillsTable({
       </div>
 
       {/* Summary line */}
-      <div style={{ margin: "6px 2px 10px", fontSize: 12, color: TOKENS.textMuted }}>
-        Showing <strong>{groups.reduce((acc, g) => acc + g.votes.length, 0)}</strong> votes across{" "}
-        <strong>{groups.length}</strong> bills
+      <div className="flex justify-between items-center mx-0.5 my-1.5 mb-2.5 text-xs text-gray-500">
+        <span>
+          Showing <strong>{allGroups.reduce((acc, g) => acc + g.votes.length, 0)}</strong> votes across{" "}
+          <strong>{allGroups.length}</strong> bills
+          {allGroups.length > itemsPerPage && (
+            <> • Page {currentPage} of {totalPages}</>
+          )}
+        </span>
+        <div className="flex items-center gap-2">
+          <label className="text-xs">Per page:</label>
+          <select 
+            value={itemsPerPage} 
+            onChange={(e) => {
+              setItemsPerPage(Number(e.target.value));
+              setCurrentPage(1);
+            }}
+            className="px-2 py-1 text-xs border border-gray-300 rounded bg-white"
+          >
+            <option value={10}>10</option>
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </div>
       </div>
 
       {/* Groups */}
-      <div style={{ display: "grid", gap: 10 }}>
-        {groups.map((g) => {
+      <div className="grid gap-2.5">
+        {paginatedGroups.map((g) => {
           const latestCounts = getCounts(g.latest || {});
           const isOpen = open.has(g.key);
           return (
             <div
               key={g.key}
-              style={{
-                background: TOKENS.cardBg,
-                border: `1px solid ${TOKENS.border}`,
-                borderRadius: TOKENS.radius,
-                boxShadow: TOKENS.shadow,
-                overflow: "hidden",
-              }}
+              className="bg-white border border-gray-300 rounded-lg shadow-sm overflow-hidden"
             >
               {/* Header row */}
               <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "28px minmax(260px,1fr) 340px 1fr 150px",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: `${padY}px 12px`,
-                  borderBottom: `1px solid ${TOKENS.borderSubtle}`,
-                }}
+                className={`grid grid-cols-[28px_minmax(260px,1fr)_340px_1fr_150px] items-center gap-3 px-3 border-b border-gray-100 ${density === "compact" ? "py-2" : "py-3"}`}
               >
                 <button
                   onClick={() => {
@@ -278,12 +257,12 @@ export default function VotedBillsTable({
                     setOpen(n);
                   }}
                   title={isOpen ? "Hide roll calls" : "Show roll calls"}
-                  style={chevBtn}
+                  className="h-7 w-7 rounded-lg border border-gray-300 bg-white cursor-pointer"
                 >
                   {isOpen ? "▾" : "▸"}
                 </button>
 
-                <div style={{ minWidth: 0 }}>
+                <div className="min-w-0">
                   {g.billType && g.billNumber ? (
                     <button
                       onClick={() => onSelectBill?.({
@@ -291,44 +270,45 @@ export default function VotedBillsTable({
                         billType: g.billType.toLowerCase(),
                         billNumber: g.billNumber
                       })}
-                      style={titleLink}
+                      className="border-0 bg-transparent p-0 cursor-pointer text-blue-600 underline text-sm font-semibold text-left"
                     >
                       {g.title || `${g.billType} ${g.billNumber}`}
                     </button>
                   ) : (
-                    <span style={{ color: TOKENS.text }}>{g.title || "(Untitled bill)"}</span>
+                    <span className="text-gray-900">{g.title || "(Untitled bill)"}</span>
                   )}
-                  <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <div className="flex gap-2 mt-1.5 items-center flex-wrap">
                     {g.billType && g.billNumber && (
-                      <span style={miniTag}>{g.billType} {g.billNumber}</span>
+                      <span className="rounded-md px-1.5 py-0.5 text-xs bg-gray-100 text-gray-700 border border-gray-300">{g.billType} {g.billNumber}</span>
                     )}
                     {g.latest?.started && (
-                      <span style={miniMuted}>{String(g.latest.started).slice(0,10)}</span>
+                      <span className="text-xs text-gray-500">{String(g.latest.started).slice(0, 10)}</span>
                     )}
                   </div>
                 </div>
 
-                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div className="flex gap-2.5 items-center flex-wrap">
                   <ResultBadge result={g.latest?.result} />
                   <Counts c={latestCounts} />
                 </div>
 
                 {/* tiny outcome spark */}
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                <div className="flex gap-1 flex-wrap items-center">
                   {g.votes.slice(0, 8).map((v) => (
-                    <span key={v.roll} title={`#${v.roll} • ${v.question || ""}`} style={{
-                      width: 9, height: 9, borderRadius: 2, display: "inline-block",
-                      background:
-                        classifyResult(v.result) === "passed" ? "#86efac" :
-                        classifyResult(v.result) === "failed" ? "#fca5a5" : "#d1d5db"
-                    }} />
+                    <span
+                      key={v.roll}
+                      title={`#${v.roll} • ${v.question || ""}`}
+                      className={`w-2 h-2 rounded-sm inline-block ${classifyResult(v.result) === "passed" ? "bg-green-300" :
+                        classifyResult(v.result) === "failed" ? "bg-red-300" : "bg-gray-300"
+                        }`}
+                    />
                   ))}
                   {g.votes.length > 8 && (
-                    <span style={{ color: TOKENS.textMuted, fontSize: 12 }}>+{g.votes.length - 8}</span>
+                    <span className="text-gray-500 text-xs">+{g.votes.length - 8}</span>
                   )}
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div className="flex justify-end">
                   <button
                     onClick={() => {
                       const v = g.latest; if (!v) return;
@@ -339,7 +319,7 @@ export default function VotedBillsTable({
                         legislationNumber: v.legislationNumber
                       });
                     }}
-                    style={primaryBtn}
+                    className="border border-blue-600 bg-blue-600 text-white rounded-lg px-2 py-2 cursor-pointer font-bold"
                   >
                     Open latest roll
                   </button>
@@ -348,31 +328,30 @@ export default function VotedBillsTable({
 
               {/* Expanded table */}
               {isOpen && (
-                <div style={{ padding: 10, background: "#FBFCFE" }}>
-                  <div style={{ overflowX: "auto" }}>
-                    <table cellPadding={0} style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
-                      <thead style={{ position: "sticky", top: 0, background: "#FBFCFE", zIndex: 1 }}>
+                <div className="p-2.5 bg-slate-50">
+                  <div className="overflow-x-auto">
+                    <table cellPadding={0} className="w-full border-separate border-spacing-0">
+                      <thead className="sticky top-0 bg-slate-50 z-10">
                         <tr>
                           {["Roll", "Question", "Result", "Counts", "Date", ""].map((h, i) => (
-                            <th key={i} align={i === 5 ? "right" : "left"} style={headCell}>{h}</th>
+                            <th key={i} align={i === 5 ? "right" : "left"} className="text-left font-bold text-xs text-gray-700 px-3 py-2.5 border-b border-gray-300">{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {g.votes.map((v, idx) => {
                           const c = getCounts(v);
-                          const zebra = idx % 2 === 1 ? { background: "#F7F9FD" } : null;
                           return (
-                            <tr key={v.roll} style={{ borderTop: `1px solid ${TOKENS.borderSubtle}`, ...zebra }}>
-                              <td style={cell}>#{v.roll}</td>
-                              <td style={{ ...cell, minWidth: 280 }}>{v.question || "—"}</td>
-                              <td style={cell}><ResultBadge result={v.result} /></td>
-                              <td style={cell}><Counts c={c} /></td>
-                              <td style={cell}>{String(v.started || "").slice(0,10)}</td>
-                              <td style={{ ...cell, textAlign: "right" }}>
+                            <tr key={v.roll} className={`border-t border-gray-100 ${idx % 2 === 1 ? "bg-blue-50" : ""}`}>
+                              <td className="px-3 py-2.5 text-gray-900 text-sm">#{v.roll}</td>
+                              <td className="px-3 py-2.5 text-gray-900 text-sm min-w-[280px]">{v.question || "—"}</td>
+                              <td className="px-3 py-2.5 text-gray-900 text-sm"><ResultBadge result={v.result} /></td>
+                              <td className="px-3 py-2.5 text-gray-900 text-sm"><Counts c={c} /></td>
+                              <td className="px-3 py-2.5 text-gray-900 text-sm">{String(v.started || "").slice(0, 10)}</td>
+                              <td className="px-3 py-2.5 text-gray-900 text-sm text-right">
                                 <button
                                   onClick={() => onSelectVote?.({ congress, session, roll: v.roll, title: v.title })}
-                                  style={rowBtn}
+                                  className="border border-gray-300 bg-white text-gray-900 rounded-lg px-1.5 py-1.5 cursor-pointer"
                                 >
                                   Open roll
                                 </button>
@@ -389,6 +368,65 @@ export default function VotedBillsTable({
           );
         })}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-4 mt-4 p-4">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${
+              currentPage === 1 
+                ? "bg-gray-50 text-gray-400 cursor-not-allowed" 
+                : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
+            }`}
+          >
+            ← Previous
+          </button>
+          
+          <div className="flex items-center gap-2">
+            {/* Show page numbers */}
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`px-3 py-2 text-sm font-medium rounded-md ${
+                    currentPage === pageNum
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+          </div>
+          
+          <button
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${
+              currentPage === totalPages 
+                ? "bg-gray-50 text-gray-400 cursor-not-allowed" 
+                : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
+            }`}
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -396,21 +434,15 @@ export default function VotedBillsTable({
 
 function DensityToggle({ value, onChange }) {
   return (
-    <div style={{ display: "inline-flex", border: `1px solid ${TOKENS.border}`, borderRadius: 999, overflow: "hidden" }}>
+    <div className="inline-flex border border-gray-300 rounded-full overflow-hidden">
       {["compact", "comfortable"].map((opt) => {
         const active = value === opt;
         return (
           <button
             key={opt}
             onClick={() => onChange(opt)}
-            style={{
-              padding: "5px 10px",
-              fontSize: 12,
-              background: active ? "#EEF2FF" : "#FFFFFF",
-              color: active ? "#1D4ED8" : TOKENS.text,
-              border: "none",
-              cursor: "pointer"
-            }}
+            className={`px-2.5 py-1.5 text-xs border-none cursor-pointer ${active ? "bg-blue-50 text-blue-600" : "bg-white text-gray-900"
+              }`}
           >
             {opt}
           </button>
@@ -421,62 +453,6 @@ function DensityToggle({ value, onChange }) {
 }
 
 
-const inputStyle = {
-  padding: "10px 12px",
-  borderRadius: 8,
-  border: `1px solid ${TOKENS.border}`,
-  background: "#fff",
-};
 
-const selectStyle = { ...inputStyle };
-
-const primaryBtn = {
-  border: `1px solid ${TOKENS.btn.primaryBg}`,
-  background: TOKENS.btn.primaryBg,
-  color: TOKENS.btn.primaryFg,
-  borderRadius: 8,
-  padding: "8px 12px",
-  cursor: "pointer",
-  fontWeight: 700,
-};
-const secBtn = {
-  border: `1px solid ${TOKENS.btn.secondaryBorder}`,
-  background: "#fff",
-  color: TOKENS.text,
-  borderRadius: 8,
-  padding: "8px 12px",
-  cursor: "pointer",
-};
-const rowBtn = { ...secBtn, padding: "6px 10px" };
-
-const chevBtn = {
-  height: 28, width: 28, borderRadius: 8,
-  border: `1px solid ${TOKENS.border}`, background: "#fff", cursor: "pointer"
-};
-
-const titleLink = {
-  border: 0, background: "transparent", padding: 0, cursor: "pointer",
-  color: "#1D4ED8", textDecoration: "underline", fontSize: 15, fontWeight: 600, textAlign: "left"
-};
-
-const miniTag = {
-  borderRadius: 6, padding: "2px 6px", fontSize: 11,
-  background: "#F3F4F6", color: "#374151", border: `1px solid ${TOKENS.border}`
-};
-const miniMuted = { fontSize: 12, color: TOKENS.textMuted };
-
-const headCell = {
-  textAlign: "left",
-  fontWeight: 700,
-  fontSize: 12,
-  color: "#344054",
-  padding: "10px 12px",
-  borderBottom: `1px solid ${TOKENS.border}`,
-};
-const cell = {
-  padding: "10px 12px",
-  color: TOKENS.text,
-  fontSize: 13,
-};
 
 

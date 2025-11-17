@@ -32,6 +32,8 @@ function VoteChip({ pos }) {
 export default function VotesTable({ rows = [], onOpenMember }) {
   const [sortKey, setSortKey] = useState("name");
   const [sortDir, setSortDir] = useState("asc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const sortedRows = useMemo(() => {
     const keyed = rows.map((r, i) => ({ r, i }));
@@ -57,12 +59,21 @@ export default function VotesTable({ rows = [], onOpenMember }) {
     return keyed.sort(cmp).map((k) => k.r);
   }, [rows, sortKey, sortDir]);
 
+  const paginatedRows = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return sortedRows.slice(startIndex, endIndex);
+  }, [sortedRows, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(sortedRows.length / itemsPerPage);
+
   const setSort = (key) => {
     if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortKey(key);
       setSortDir("asc");
     }
+    setCurrentPage(1); // Reset to first page when sorting changes
   };
 
   const sortIndicator = (key) =>
@@ -72,6 +83,7 @@ export default function VotesTable({ rows = [], onOpenMember }) {
     sortKey !== key ? "none" : sortDir === "asc" ? "ascending" : "descending";
 
   const handleOpenMember = (bioguideId) => {
+    console.log("Opening member:", bioguideId); // Debug log
     if (typeof onOpenMember === "function" && bioguideId) {
       onOpenMember(bioguideId);
     }
@@ -80,7 +92,27 @@ export default function VotesTable({ rows = [], onOpenMember }) {
   return (
     <div className="bg-white border border-gray-300 rounded-lg shadow-sm overflow-hidden">
       <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-300 bg-blue-50 text-sm text-gray-600">
-        Showing <strong>{rows.length}</strong> members
+        <span>
+          Showing <strong>{paginatedRows.length}</strong> of <strong>{rows.length}</strong> members
+          {totalPages > 1 && <> • Page {currentPage} of {totalPages}</>}
+        </span>
+        <div className="flex items-center gap-2">
+          <label className="text-xs">Per page:</label>
+          <select 
+            value={itemsPerPage} 
+            onChange={(e) => {
+              setItemsPerPage(Number(e.target.value));
+              setCurrentPage(1);
+            }}
+            className="px-2 py-1 text-xs border border-gray-300 rounded bg-white"
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+            <option value={200}>200</option>
+          </select>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -127,13 +159,13 @@ export default function VotesTable({ rows = [], onOpenMember }) {
           </thead>
 
           <tbody>
-            {sortedRows.map((m, idx) => (
+            {paginatedRows.map((m, idx) => (
               <tr key={m.bioguideId ?? idx} className="border-t border-gray-300 odd:bg-blue-50 hover:bg-blue-100">
                 <td className="px-3 py-2.5 text-gray-900 text-sm min-w-[220px]">
                   <button
                     type="button"
                     onClick={() => handleOpenMember(m.bioguideId)}
-                    className="bg-none border-none text-primary underline cursor-pointer p-0 font-inherit"
+                    className="bg-none border-none text-blue-600 underline cursor-pointer p-0 font-inherit hover:text-blue-800"
                     aria-label={`Open profile for ${m.name}`}
                   >
                     {m.name}
@@ -149,6 +181,65 @@ export default function VotesTable({ rows = [], onOpenMember }) {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-4 p-4 border-t border-gray-300 bg-gray-50">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${
+              currentPage === 1 
+                ? "bg-gray-50 text-gray-400 cursor-not-allowed" 
+                : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
+            }`}
+          >
+            ← Previous
+          </button>
+          
+          <div className="flex items-center gap-2">
+            {/* Show page numbers */}
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`px-3 py-2 text-sm font-medium rounded-md ${
+                    currentPage === pageNum
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+          </div>
+          
+          <button
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${
+              currentPage === totalPages 
+                ? "bg-gray-50 text-gray-400 cursor-not-allowed" 
+                : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
+            }`}
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   );
 }

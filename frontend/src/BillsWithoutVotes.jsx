@@ -129,25 +129,13 @@ export default function BillsWithoutVotes() {
       {/* Filters */}
       <div className="bg-gray-50 border border-gray-300 rounded-lg p-4 mb-5 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 items-end">
         <div>
-          <label style={{ 
-            display: "block", 
-            fontSize: 12, 
-            fontWeight: 600, 
-            color: "#374151", 
-            marginBottom: 4 
-          }}>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">
             CONGRESS
           </label>
           <select
             value={congress}
             onChange={(e) => setCongress(parseInt(e.target.value))}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              border: "1px solid #d1d5db",
-              borderRadius: 6,
-              fontSize: 14
-            }}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
           >
             <option value={119}>119th Congress (2025-2026)</option>
             <option value={118}>118th Congress (2023-2024)</option>
@@ -155,25 +143,13 @@ export default function BillsWithoutVotes() {
         </div>
 
         <div>
-          <label style={{ 
-            display: "block", 
-            fontSize: 12, 
-            fontWeight: 600, 
-            color: "#374151", 
-            marginBottom: 4 
-          }}>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">
             BILL TYPE
           </label>
           <select
             value={billType}
             onChange={(e) => setBillType(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              border: "1px solid #d1d5db",
-              borderRadius: 6,
-              fontSize: 14
-            }}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
           >
             <option value="">All Types</option>
             <option value="hr">House Bills (HR)</option>
@@ -185,21 +161,12 @@ export default function BillsWithoutVotes() {
           </select>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="flex items-center gap-2">
           <EducationalTooltip
             title="🎯 Early-Stage Betting"
             content="These bills haven't been voted on yet, making them perfect for betting on committee outcomes, sponsor counts, or whether they'll even get a vote!"
           >
-            <div style={{
-              padding: "6px 12px",
-              background: "#dbeafe",
-              color: "#1e40af",
-              borderRadius: 6,
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "help",
-              borderBottom: "1px dotted #1e40af"
-            }}>
+            <div className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md text-xs font-semibold cursor-help border-b border-dotted border-blue-700">
               💡 Betting Opportunities
             </div>
           </EducationalTooltip>
@@ -207,108 +174,52 @@ export default function BillsWithoutVotes() {
       </div>
 
       {/* Results Summary */}
-      <div style={{ 
-        marginBottom: 16, 
-        fontSize: 14, 
-        color: "#6b7280",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        flexWrap: "wrap",
-        gap: 8
-      }}>
+      <div className="mb-4 text-sm text-gray-500 flex justify-between items-center flex-wrap gap-2">
         <span>
           Showing {pagination.offset + 1}-{Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total} bills
         </span>
         {loading && (
-          <span style={{ color: "#2563eb" }}>Loading...</span>
+          <span className="text-blue-600">Loading...</span>
         )}
       </div>
 
       {/* Bills List */}
       {bills.length === 0 ? (
-        <div style={{
-          padding: 40,
-          textAlign: "center",
-          background: "#f8fafc",
-          border: "1px dashed #cbd5e1",
-          borderRadius: 8,
-          color: "#6b7280"
-        }}>
-          <div style={{ fontSize: 24, marginBottom: 8 }}>📭</div>
-          <p style={{ margin: 0 }}>
+        <div className="p-10 text-center bg-gray-50 border border-dashed border-gray-400 rounded-lg text-gray-500">
+          <div className="text-2xl mb-2">📭</div>
+          <p className="m-0">
             No bills without votes found for the selected filters.
           </p>
         </div>
       ) : (
-        <div style={{ display: "grid", gap: 16 }}>
+        <div className="grid gap-4">
           {bills.map((bill) => (
             <div
               key={`${bill.congress}-${bill.billType}-${bill.billNumber}`}
-              style={{
-                border: "1px solid #e5e7eb",
-                borderRadius: 8,
-                padding: 20,
-                background: "white",
-                transition: "all 0.2s",
-                cursor: "pointer"
-              }}
+              className="border border-gray-300 rounded-lg p-5 bg-white transition-all duration-200 cursor-pointer hover:border-blue-600 hover:shadow-lg hover:shadow-blue-100"
               onClick={() => navigateToBill(bill)}
-              onMouseOver={(e) => {
-                e.currentTarget.style.borderColor = "#2563eb";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(37, 99, 235, 0.1)";
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.borderColor = "#e5e7eb";
-                e.currentTarget.style.boxShadow = "none";
-              }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <span style={{
-                      background: "#2563eb",
-                      color: "white",
-                      padding: "4px 8px",
-                      borderRadius: 4,
-                      fontSize: 12,
-                      fontWeight: 600
-                    }}>
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-semibold">
                       {bill.billType.toUpperCase()} {bill.billNumber}
                     </span>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>
+                    <span className="text-xs text-gray-500">
                       Introduced: {formatDate(bill.introducedDate)}
                     </span>
                   </div>
                   
-                  <h3 style={{ 
-                    margin: "0 0 12px 0", 
-                    fontSize: 18, 
-                    lineHeight: 1.4,
-                    color: "#1f2937"
-                  }}>
+                  <h3 className="m-0 mb-3 text-lg leading-relaxed text-gray-800">
                     {bill.title || `${bill.billType.toUpperCase()} ${bill.billNumber}`}
                   </h3>
                   
-                  <div style={{ 
-                    fontSize: 14, 
-                    color: "#6b7280",
-                    lineHeight: 1.4
-                  }}>
+                  <div className="text-sm text-gray-500 leading-relaxed">
                     <strong>Latest Action:</strong> {getLatestActionText(bill.latestAction)}
                   </div>
                 </div>
                 
-                <div style={{
-                  background: "#f0fdf4",
-                  color: "#166534",
-                  padding: "6px 12px",
-                  borderRadius: 6,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  whiteSpace: "nowrap",
-                  marginLeft: 16
-                }}>
+                <div className="bg-green-50 text-green-800 px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ml-4">
                   🎯 No Votes Yet
                 </div>
               </div>
@@ -319,48 +230,31 @@ export default function BillsWithoutVotes() {
 
       {/* Pagination */}
       {pagination.total > pagination.limit && (
-        <div style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: 16,
-          marginTop: 24,
-          padding: 16
-        }}>
+        <div className="flex justify-center items-center gap-4 mt-6 p-4">
           <button
             onClick={handlePrevPage}
             disabled={pagination.offset === 0}
-            style={{
-              padding: "8px 16px",
-              border: "1px solid #d1d5db",
-              background: pagination.offset === 0 ? "#f9fafb" : "white",
-              color: pagination.offset === 0 ? "#9ca3af" : "#374151",
-              borderRadius: 6,
-              cursor: pagination.offset === 0 ? "not-allowed" : "pointer",
-              fontSize: 14,
-              fontWeight: 500
-            }}
+            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${
+              pagination.offset === 0 
+                ? "bg-gray-50 text-gray-400 cursor-not-allowed" 
+                : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
+            }`}
           >
             ← Previous
           </button>
           
-          <span style={{ fontSize: 14, color: "#6b7280" }}>
+          <span className="text-sm text-gray-500">
             Page {Math.floor(pagination.offset / pagination.limit) + 1} of {Math.ceil(pagination.total / pagination.limit)}
           </span>
           
           <button
             onClick={handleNextPage}
             disabled={!pagination.hasMore}
-            style={{
-              padding: "8px 16px",
-              border: "1px solid #d1d5db",
-              background: !pagination.hasMore ? "#f9fafb" : "white",
-              color: !pagination.hasMore ? "#9ca3af" : "#374151",
-              borderRadius: 6,
-              cursor: !pagination.hasMore ? "not-allowed" : "pointer",
-              fontSize: 14,
-              fontWeight: 500
-            }}
+            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${
+              !pagination.hasMore 
+                ? "bg-gray-50 text-gray-400 cursor-not-allowed" 
+                : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
+            }`}
           >
             Next →
           </button>

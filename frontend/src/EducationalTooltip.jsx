@@ -3,95 +3,49 @@ import { useState } from "react";
 export default function EducationalTooltip({ children, title, content, position = "top" }) {
   const [isVisible, setIsVisible] = useState(false);
 
-  const tooltipStyle = {
-    position: "absolute",
-    zIndex: 1000,
-    background: "#1f2937",
-    color: "white",
-    padding: "12px 16px",
-    borderRadius: 8,
-    fontSize: 14,
-    lineHeight: 1.4,
-    maxWidth: 300,
-    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-    border: "1px solid #374151",
-    ...(position === "top" && {
-      bottom: "100%",
-      left: "50%",
-      transform: "translateX(-50%)",
-      marginBottom: 8
-    }),
-    ...(position === "bottom" && {
-      top: "100%",
-      left: "50%",
-      transform: "translateX(-50%)",
-      marginTop: 8
-    }),
-    ...(position === "right" && {
-      left: "100%",
-      top: "50%",
-      transform: "translateY(-50%)",
-      marginLeft: 8
-    }),
-    ...(position === "left" && {
-      right: "100%",
-      top: "50%",
-      transform: "translateY(-50%)",
-      marginRight: 8
-    })
+  const getPositionClasses = () => {
+    switch (position) {
+      case "top":
+        return "bottom-full left-1/2 -translate-x-1/2 mb-2";
+      case "bottom":
+        return "top-full left-1/2 -translate-x-1/2 mt-2";
+      case "right":
+        return "left-full top-1/2 -translate-y-1/2 ml-2";
+      case "left":
+        return "right-full top-1/2 -translate-y-1/2 mr-2";
+      default:
+        return "bottom-full left-1/2 -translate-x-1/2 mb-2";
+    }
   };
 
-  const arrowStyle = {
-    position: "absolute",
-    width: 0,
-    height: 0,
-    ...(position === "top" && {
-      top: "100%",
-      left: "50%",
-      transform: "translateX(-50%)",
-      borderLeft: "6px solid transparent",
-      borderRight: "6px solid transparent",
-      borderTop: "6px solid #1f2937"
-    }),
-    ...(position === "bottom" && {
-      bottom: "100%",
-      left: "50%",
-      transform: "translateX(-50%)",
-      borderLeft: "6px solid transparent",
-      borderRight: "6px solid transparent",
-      borderBottom: "6px solid #1f2937"
-    }),
-    ...(position === "right" && {
-      right: "100%",
-      top: "50%",
-      transform: "translateY(-50%)",
-      borderTop: "6px solid transparent",
-      borderBottom: "6px solid transparent",
-      borderRight: "6px solid #1f2937"
-    }),
-    ...(position === "left" && {
-      left: "100%",
-      top: "50%",
-      transform: "translateY(-50%)",
-      borderTop: "6px solid transparent",
-      borderBottom: "6px solid transparent",
-      borderLeft: "6px solid #1f2937"
-    })
+  const getArrowClasses = () => {
+    switch (position) {
+      case "top":
+        return "top-full left-1/2 -translate-x-1/2 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-gray-800";
+      case "bottom":
+        return "bottom-full left-1/2 -translate-x-1/2 border-l-[6px] border-r-[6px] border-b-[6px] border-l-transparent border-r-transparent border-b-gray-800";
+      case "right":
+        return "right-full top-1/2 -translate-y-1/2 border-t-[6px] border-b-[6px] border-r-[6px] border-t-transparent border-b-transparent border-r-gray-800";
+      case "left":
+        return "left-full top-1/2 -translate-y-1/2 border-t-[6px] border-b-[6px] border-l-[6px] border-t-transparent border-b-transparent border-l-gray-800";
+      default:
+        return "top-full left-1/2 -translate-x-1/2 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-gray-800";
+    }
   };
 
   return (
     <div
-      style={{ position: "relative", display: "inline-block" }}
+      className="relative inline-block"
       onMouseEnter={() => setIsVisible(true)}
       onMouseLeave={() => setIsVisible(false)}
     >
       {children}
 
       {isVisible && (
-        <div style={tooltipStyle}>
-          <div style={arrowStyle} />
+        <div className={`absolute z-[1000] bg-gray-800 text-white px-4 py-3 rounded-lg text-sm leading-relaxed max-w-xs shadow-lg border border-gray-600 ${getPositionClasses()}`}>
+          <div className={`absolute w-0 h-0 ${getArrowClasses()}`} />
           {title && (
-            <div style={{ fontWeight: 600, marginBottom: 6, color: "#fbbf24" }}>
+            <div className="font-semibold mb-1.5 text-yellow-400">
               {title}
             </div>
           )}

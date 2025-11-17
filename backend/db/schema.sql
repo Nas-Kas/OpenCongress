@@ -81,6 +81,22 @@ CREATE TABLE IF NOT EXISTS ingestion_checkpoints (
   last_run_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Cache for AI-generated bill summaries
+CREATE TABLE IF NOT EXISTS bill_summaries (
+  congress    INT  NOT NULL,
+  bill_type   TEXT NOT NULL,
+  bill_number TEXT NOT NULL,
+  summary     JSONB NOT NULL,  -- Store structured AI summary
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (congress, bill_type, bill_number),
+  FOREIGN KEY (congress, bill_type, bill_number) 
+    REFERENCES bills (congress, bill_type, bill_number) 
+    ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS bill_summaries_created_idx ON bill_summaries (created_at DESC);
+
 -- === Betting System Tables ===
 
 CREATE TABLE IF NOT EXISTS users (

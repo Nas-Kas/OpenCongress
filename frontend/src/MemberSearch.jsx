@@ -62,31 +62,19 @@ export default function MemberSearch({ onSelect, placeholder = "Search members b
   };
 
   return (
-    <div ref={boxRef} style={{ position: "relative", width: 360 }}>
+    <div ref={boxRef} className="relative w-90">
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onFocus={() => { if (results.length) setOpen(true); }}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
-        style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", width: "100%" }}
+        className="px-2.5 py-2 rounded-lg border border-gray-300 w-full"
       />
       {open && results.length > 0 && (
         <div
           role="listbox"
-          style={{
-            position: "absolute",
-            top: "110%",
-            left: 0,
-            right: 0,
-            background: "white",
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-            boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
-            zIndex: 10,
-            maxHeight: 300,
-            overflowY: "auto"
-          }}
+          className="absolute top-[110%] left-0 right-0 bg-white border border-gray-300 rounded-lg shadow-lg z-10 max-h-75 overflow-y-auto"
         >
           {results.map((r, i) => (
             <div
@@ -95,30 +83,22 @@ export default function MemberSearch({ onSelect, placeholder = "Search members b
               aria-selected={i === highlight}
               onMouseEnter={() => setHighlight(i)}
               onMouseDown={(e) => { e.preventDefault(); choose(r); }} // prevent blur
-              style={{
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-                padding: "8px 10px",
-                background: i === highlight ? "#f1f5f9" : "white",
-                cursor: "pointer"
-              }}
+              className={`flex gap-2.5 items-center px-2.5 py-2 cursor-pointer ${
+                i === highlight ? "bg-slate-100" : "bg-white"
+              }`}
             >
               {r.imageUrl ? (
-                <img src={r.imageUrl} alt="" width={28} height={28} style={{ borderRadius: 6, flex: "0 0 auto" }} />
+                <img src={r.imageUrl} alt="" width={28} height={28} className="rounded-md flex-shrink-0" />
               ) : (
-                <div style={{
-                  width: 28, height: 28, borderRadius: 6, background: "#e5e7eb",
-                  display: "grid", placeItems: "center", fontSize: 12, color: "#374151"
-                }}>
+                <div className="w-7 h-7 rounded-md bg-gray-300 grid place-items-center text-xs text-gray-700">
                   {r.name?.[0] || "?"}
                 </div>
               )}
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div className="min-w-0">
+                <div className="font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
                   {r.name}
                 </div>
-                <div style={{ fontSize: 12, color: "#475569" }}>
+                <div className="text-xs text-gray-600">
                   {r.party} • {r.state} • {r.bioguideId}
                 </div>
               </div>

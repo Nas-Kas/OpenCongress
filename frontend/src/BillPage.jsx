@@ -1,528 +1,421 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-/* ================= UI tokens (same language as VotedBillsTable) ================= */
-const TOKENS = {
-  radius: 10,
-  border: "#E5E7EB",
-  borderSubtle: "#EEF2F7",
-  text: "#111827",
-  textMuted: "#6B7280",
-  cardBg: "#FFFFFF",
-  pageBg: "#F7F9FC",
-  shadow: "0 1px 2px rgba(0,0,0,0.04), 0 6px 16px rgba(0,0,0,0.04)",
-  badge: {
-    passBg: "#E9F8EE",
-    passFg: "#0B7A45",
-    failBg: "#FDECEC",
-    failFg: "#B42318",
-    otherBg: "#F2F4F7",
-    otherFg: "#344054",
-    yBg: "#EAF8F0",
-    yFg: "#15803D",
-    nBg: "#FDEEEE",
-    nFg: "#B91C1C",
-    pBg: "#F2F4F7",
-    pFg: "#475467",
-    nvBg: "#FEF6E7",
-    nvFg: "#92400E",
-  },
-  btn: {
-    primaryBg: "#2563EB",
-    primaryBgHover: "#1E4ED8",
-    primaryFg: "#FFFFFF",
-    secondaryBorder: "#E5E7EB",
-    secondaryHover: "#F8FAFC",
-  },
-};
-
-/* ================= helpers ================= */
-function classifyResult(result) {
-  const s = (result || "").toLowerCase();
-  if (s.includes("pass") || s.includes("agreed")) return "passed";
-  if (s.includes("fail") || s.includes("reject")) return "failed";
-  return "other";
-}
-
-function ResultBadge({ result }) {
-  const cls = classifyResult(result);
-  const bg =
-    cls === "passed" ? TOKENS.badge.passBg :
-    cls === "failed" ? TOKENS.badge.failBg : TOKENS.badge.otherBg;
-  const fg =
-    cls === "passed" ? TOKENS.badge.passFg :
-    cls === "failed" ? TOKENS.badge.failFg : TOKENS.badge.otherFg;
-  return (
-    <span style={{
-      background: bg, color: fg, padding: "4px 10px",
-      borderRadius: 999, fontSize: 12, fontWeight: 700
-    }}>
-      {result || "—"}
-    </span>
-  );
-}
-
-function PositionChip({ pos }) {
-  const bg =
-    pos === "Yea" ? TOKENS.badge.yBg :
-    pos === "Nay" ? TOKENS.badge.nBg :
-    pos === "Present" ? TOKENS.badge.pBg :
-    TOKENS.badge.nvBg;
-  const fg =
-    pos === "Yea" ? TOKENS.badge.yFg :
-    pos === "Nay" ? TOKENS.badge.nFg :
-    pos === "Present" ? TOKENS.badge.pFg :
-    TOKENS.badge.nvFg;
-
-  return (
-    <span style={{
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 6,
-      background: bg,
-      color: fg,
-      borderRadius: 999,
-      padding: "2px 10px",
-      fontSize: 12,
-      fontWeight: 700,
-    }}>
-      {pos || "—"}
-    </span>
-  );
-}
-
-function getCounts(v = {}) {
-  if (v.counts && typeof v.counts === "object") return v.counts;
-  return {
-    yea: v.yeaCount ?? 0,
-    nay: v.nayCount ?? 0,
-    present: v.presentCount ?? 0,
-    notVoting: v.notVotingCount ?? 0,
-  };
-}
-
-function CountChip({ label, value, bg, fg }) {
-  return (
-    <span style={{
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 6,
-      background: bg,
-      color: fg,
-      borderRadius: 999,
-      padding: "2px 10px",
-      fontSize: 12,
-      fontWeight: 700,
-      fontVariantNumeric: "tabular-nums",
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace"
-    }}>
-      <span style={{ opacity: 0.8 }}>{label}</span>
-      <span>{value ?? 0}</span>
-    </span>
-  );
-}
-
-function Counts({ c }) {
-  return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <CountChip label="Y" value={c.yea} bg={TOKENS.badge.yBg} fg={TOKENS.badge.yFg} />
-      <CountChip label="N" value={c.nay} bg={TOKENS.badge.nBg} fg={TOKENS.badge.nFg} />
-      <CountChip label="P" value={c.present} bg={TOKENS.badge.pBg} fg={TOKENS.badge.pFg} />
-      <CountChip label="NV" value={c.notVoting} bg={TOKENS.badge.nvBg} fg={TOKENS.badge.nvFg} />
-    </div>
-  );
-}
-
-/* ================= shared styles ================= */
-const inputStyle = {
-  padding: "10px 12px",
-  borderRadius: 8,
-  border: `1px solid ${TOKENS.border}`,
-  background: "#fff",
-};
-const selectStyle = { ...inputStyle };
-const headCell = {
-  textAlign: "left",
-  fontWeight: 700,
-  fontSize: 12,
-  color: "#344054",
-  padding: "10px 12px",
-  borderBottom: `1px solid ${TOKENS.border}`,
-};
-const cell = {
-  padding: "10px 12px",
-  color: TOKENS.text,
-  fontSize: 13,
-};
-const titleLink = {
-  border: 0, background: "transparent", padding: 0, cursor: "pointer",
-  color: "#1D4ED8", textDecoration: "underline", fontSize: 15, fontWeight: 600, textAlign: "left"
-};
-const miniTag = {
-  borderRadius: 6, padding: "2px 6px", fontSize: 11,
-  background: "#F3F4F6", color: "#374151", border: `1px solid ${TOKENS.border}`
-};
-const miniMuted = { fontSize: 12, color: TOKENS.textMuted };
-const chevBtn = {
-  height: 28, width: 28, borderRadius: 8,
-  border: `1px solid ${TOKENS.border}`, background: "#fff", cursor: "pointer"
-};
-const rowBtn = {
-  border: `1px solid ${TOKENS.btn.secondaryBorder}`,
-  background: "#fff",
-  color: TOKENS.text,
-  borderRadius: 8,
-  padding: "6px 10px",
-  cursor: "pointer",
-  fontWeight: 600,
-};
-
-/* ================= component ================= */
-export default function MemberPage({ bioguideId, congress = 119, session = 1, onOpenRoll }) {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState(null);
+export default function BillPage({ congress, billType, billNumber, onBack, onOpenRoll }) {
+  const [billData, setBillData] = useState(null);
+  const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // filters
-  const [q, setQ] = useState("");
-  const [fPos, setFPos] = useState("all");
-  const [fRes, setFRes] = useState("all");
-  const [fType, setFType] = useState("all");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-
-  const [open, setOpen] = useState(() => new Set()); // group expand/collapse
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [summaryError, setSummaryError] = useState(null);
 
   useEffect(() => {
-    const ctrl = new AbortController();
-    setLoading(true);
-    setErr(null);
-    setData(null);
+    const fetchBillData = async () => {
+      setLoading(true);
+      setError(null);
 
-    fetch(
-      `http://127.0.0.1:8000/member/${bioguideId}/house-votes?congress=${congress}&session=${session}&window=200`,
-      { signal: ctrl.signal }
-    )
-      .then((r) => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); })
-      .then(setData)
-      .catch((e) => { if (e.name !== "AbortError") setErr(String(e)); })
-      .finally(() => setLoading(false));
+      try {
+        // Fetch bill votes and details using the existing API pattern
+        const votesResponse = await fetch(
+          `http://127.0.0.1:8000/house/votes?congress=${congress}&session=1&limit=200&include_titles=1&include_questions=1`
+        );
 
-    return () => ctrl.abort();
-  }, [bioguideId, congress, session]);
+        if (!votesResponse.ok) {
+          throw new Error(`Failed to fetch votes: ${votesResponse.statusText}`);
+        }
 
-  const votes = useMemo(() => data?.votes ?? [], [data]);
+        const votesData = await votesResponse.json();
 
-  const uniqueTypes = useMemo(() => {
-    const s = new Set();
-    for (const v of votes) if (v.legislationType) s.add(v.legislationType);
-    return Array.from(s);
-  }, [votes]);
+        // Filter votes for this specific bill
+        const billVotes = votesData.votes?.filter(vote =>
+          vote.legislationType?.toLowerCase() === billType.toLowerCase() &&
+          String(vote.legislationNumber) === String(billNumber)
+        ) || [];
 
-  const filtered = useMemo(() => {
-    let list = votes;
-    if (q.trim()) {
-      const needle = q.toLowerCase();
-      list = list.filter(
-        (v) =>
-          (v.title || "").toLowerCase().includes(needle) ||
-          (v.question || "").toLowerCase().includes(needle)
-      );
-    }
-    if (fPos !== "all") list = list.filter((v) => v.position === fPos);
-    if (fRes !== "all") list = list.filter((v) => classifyResult(v.result) === fRes);
-    if (fType !== "all") list = list.filter((v) => (v.legislationType || "") === fType);
-    if (from) list = list.filter((v) => (v.started || "").slice(0, 10) >= from);
-    if (to) list = list.filter((v) => (v.started || "").slice(0, 10) <= to);
+        // Use the first vote to get bill details, or create a basic structure
+        const billInfo = billVotes.length > 0 ? billVotes[0] : {
+          title: `${billType.toUpperCase()} ${billNumber}`,
+          legislationType: billType,
+          legislationNumber: billNumber,
+          congress: congress
+        };
 
-    // newest first (per-vote)
-    list = [...list].sort((a, b) =>
-      String(b.started || "").localeCompare(String(a.started || ""))
-    );
-    return list;
-  }, [votes, q, fPos, fRes, fType, from, to]);
-
-  // === GROUP BY BILL (same logic as VotedBillsTable) ===
-  const groups = useMemo(() => {
-    const map = new Map();
-    for (const v of filtered) {
-      const type = (v.legislationType || "").trim();
-      const num = String(v.legislationNumber || "").trim();
-      const key = type && num ? `${type}::${num}` : `title::${(v.title || "").trim()}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          billType: type || null,
-          billNumber: num || null,
-          title: (v.title || "").trim(),
-          votes: [],
+        setBillData({
+          ...billInfo,
+          votes: billVotes,
+          title: billInfo.title || `${billType.toUpperCase()} ${billNumber}`,
+          introducedDate: billInfo.introducedDate,
+          sponsor: billInfo.sponsor,
+          committees: billInfo.committees,
+          latestAction: billInfo.latestAction
         });
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
-      map.get(key).votes.push(v);
-    }
-    const arr = Array.from(map.values()).map((g) => {
-      const sorted = [...g.votes].sort((a, b) =>
-        String(b.started || "").localeCompare(String(a.started || ""))
+    };
+
+    fetchBillData();
+  }, [congress, billType, billNumber]);
+
+  const generateSummary = async () => {
+    setSummaryLoading(true);
+    setSummaryError(null);
+
+    try {
+      // Try the generate-summary endpoint, but handle if it doesn't exist
+      const response = await fetch(
+        `http://127.0.0.1:8000/bill/${congress}/${billType}/${billNumber}/generate-summary`,
+        { method: 'POST' }
       );
-      return { ...g, latest: sorted[0], votes: sorted };
-    });
-    arr.sort((a, b) =>
-      String(b.latest?.started || "").localeCompare(String(a.latest?.started || ""))
+
+      if (response.status === 405 || response.status === 404) {
+        // If the endpoint doesn't exist, create a mock summary for now
+        setSummary({
+          tldr: "AI bill summary generation is not yet available for this bill. This feature is coming soon!",
+          keyPoints: [
+            "Bill analysis and summarization features are in development",
+            "Check back later for AI-powered insights",
+            "You can still view bill details and voting history below"
+          ],
+          importance: 3,
+          readingTime: "2-3 minutes"
+        });
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to generate summary: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setSummary(data);
+    } catch (err) {
+      setSummaryError(err.message);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-10 gap-3">
+        <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
+        <span>Loading bill details...</span>
+      </div>
     );
-    return arr;
-  }, [filtered]);
+  }
 
-  if (loading) return <div style={{ padding: 12, color: TOKENS.textMuted }}>Loading member…</div>;
-  if (err) return <div style={{ padding: 12, color: "#B42318" }}>Error: {err}</div>;
-  if (!data) return <div style={{ padding: 12 }}>No data.</div>;
-
-  const { profile, stats } = data;
-
-  const setQuickPos = (p) => setFPos((cur) => (cur === p ? "all" : p));
+  if (error) {
+    return (
+      <div className="p-5 bg-red-50 border border-red-200 rounded-lg text-red-600">
+        <strong>Error loading bill:</strong> {error}
+      </div>
+    );
+  }
 
   return (
-    <div style={{ background: TOKENS.pageBg, padding: 8, borderRadius: TOKENS.radius }}>
-      {/* Card header */}
-      <div style={{
-        background: TOKENS.cardBg,
-        border: `1px solid ${TOKENS.border}`,
-        borderRadius: TOKENS.radius,
-        boxShadow: TOKENS.shadow,
-        padding: 12,
-        marginBottom: 10
-      }}>
-        <header style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8 }}>
-          {profile?.imageUrl && (
-            <img
-              src={profile.imageUrl}
-              alt={profile.name}
-              width={56}
-              height={56}
-              style={{ borderRadius: 8 }}
-            />
-          )}
-          <div>
-            <h2 style={{ margin: 0, fontSize: 20 }}>{profile?.name}</h2>
-            <div style={{ color: TOKENS.textMuted }}>
-              {profile?.party} • {profile?.state} • {profile?.bioguideId}
-            </div>
+    <div className="max-w-4xl mx-auto">
+      {/* Header */}
+      <div className="mb-6">
+        <button
+          onClick={onBack}
+          className="mb-4 px-4 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 cursor-pointer"
+        >
+          ← Back
+        </button>
 
-            {/* Quick chips */}
-            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", fontSize: 13 }}>
-              <Chip color={TOKENS.badge.yBg} onClick={() => setQuickPos("Yea")}>Yea {stats?.yea ?? 0}</Chip>
-              <Chip color={TOKENS.badge.nBg} onClick={() => setQuickPos("Nay")}>Nay {stats?.nay ?? 0}</Chip>
-              <Chip color={TOKENS.badge.pBg} onClick={() => setQuickPos("Present")}>Present {stats?.present ?? 0}</Chip>
-              <Chip color={TOKENS.badge.nvBg} onClick={() => setQuickPos("Not Voting")}>Not Voting {stats?.notVoting ?? 0}</Chip>
-            </div>
+        <div className="mb-4">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="bg-blue-600 text-white px-3 py-1 rounded text-sm font-semibold">
+              {billType.toUpperCase()} {billNumber}
+            </span>
+            <span className="text-sm text-gray-500">
+              {congress}th Congress
+            </span>
           </div>
-        </header>
 
-        {/* Filters */}
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(260px,1fr) 160px 160px 150px 150px 120px", gap: 8, alignItems: "center" }}>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Filter by bill title or question…"
-            style={inputStyle}
-          />
-          <select value={fPos} onChange={(e) => setFPos(e.target.value)} style={selectStyle}>
-            <option value="all">All positions</option>
-            <option value="Yea">Yea</option>
-            <option value="Nay">Nay</option>
-            <option value="Present">Present</option>
-            <option value="Not Voting">Not Voting</option>
-          </select>
-          <select value={fRes} onChange={(e) => setFRes(e.target.value)} style={selectStyle}>
-            <option value="all">Any result</option>
-            <option value="passed">Passed/Agreed</option>
-            <option value="failed">Failed/Rejected</option>
-            <option value="other">Other</option>
-          </select>
-          <select value={fType} onChange={(e) => setFType(e.target.value)} style={selectStyle}>
-            <option value="all">All bill types</option>
-            {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={selectStyle} />
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={selectStyle} />
-        </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            {billData?.title || `${billType.toUpperCase()} ${billNumber}`}
+          </h1>
 
-        <div style={{ marginTop: 6, fontSize: 12, color: TOKENS.textMuted }}>
-          Showing <strong>{filtered.length}</strong> votes across <strong>{groups.length}</strong> bills
-          {q && <> • search: “{q}”</>}
-          {fPos !== "all" && <> • position: {fPos}</>}
-          {fRes !== "all" && <> • result: {fRes}</>}
-          {fType !== "all" && <> • type: {fType}</>}
-          {(from || to) && <> • date: {from || "…"}–{to || "…"}</>}
-          {(q || fPos !== "all" || fRes !== "all" || fType !== "all" || from || to) && (
-            <> • <button
-              onClick={() => { setQ(""); setFPos("all"); setFRes("all"); setFType("all"); setFrom(""); setTo(""); }}
-              style={{ border: 0, background: "transparent", color: "#1d4ed8", textDecoration: "underline", cursor: "pointer" }}
-            >
-              reset
-            </button></>
+          {billData?.introducedDate && (
+            <p className="text-sm text-gray-500">
+              Introduced: {new Date(billData.introducedDate).toLocaleDateString()}
+            </p>
           )}
         </div>
       </div>
 
-      {/* GROUPS (collapsible) */}
-      <div style={{ display: "grid", gap: 10 }}>
-        {groups.map((g) => {
-          const latestCounts = getCounts(g.latest || {});
-          const isOpen = open.has(g.key);
-          // for member context, show *member's* latest position in this bill's rolls
-          const latestMemberPos = g.latest?.position || null;
-
-          return (
-            <div
-              key={g.key}
-              style={{
-                background: TOKENS.cardBg,
-                border: `1px solid ${TOKENS.border}`,
-                borderRadius: TOKENS.radius,
-                boxShadow: TOKENS.shadow,
-                overflow: "hidden",
-              }}
+      {/* Bill Summary Section */}
+      <div className="bg-white border border-gray-300 rounded-lg shadow-sm mb-6">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">📄 AI Bill Summary</h2>
+            <button
+              onClick={generateSummary}
+              disabled={summaryLoading}
+              className={`px-4 py-2 rounded-lg font-medium ${summaryLoading
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
+                }`}
             >
-              {/* Group header */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "28px minmax(260px,1fr) 340px 1fr 180px",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "10px 12px",
-                  borderBottom: `1px solid ${TOKENS.borderSubtle}`,
-                }}
-              >
-                <button
-                  onClick={() => {
-                    const n = new Set(open);
-                    if (n.has(g.key)) n.delete(g.key); else n.add(g.key);
-                    setOpen(n);
-                  }}
-                  title={isOpen ? "Hide roll calls" : "Show roll calls"}
-                  style={chevBtn}
-                >
-                  {isOpen ? "▾" : "▸"}
-                </button>
-
-                <div style={{ minWidth: 0 }}>
-                  {g.billType && g.billNumber ? (
-                    <button
-                      onClick={() => {
-                        const url = new URL(window.location);
-                        url.searchParams.set('congress', congress);
-                        url.searchParams.set('billType', g.billType.toLowerCase());
-                        url.searchParams.set('billNumber', g.billNumber);
-                        url.searchParams.delete('member');
-                        window.location.href = url.toString();
-                      }}
-                      style={titleLink}
-                    >
-                      {g.title || `${g.billType} ${g.billNumber}`}
-                    </button>
-                  ) : (
-                    <span style={{ color: TOKENS.text }}>{g.title || "(Untitled bill)"}</span>
-                  )}
-                  <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    {g.billType && g.billNumber && (
-                      <span style={miniTag}>{g.billType} {g.billNumber}</span>
-                    )}
-                    {g.latest?.started && (
-                      <span style={miniMuted}>{String(g.latest.started).slice(0,10)}</span>
-                    )}
-                  </div>
+              {summaryLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
+                  Generating...
                 </div>
+              ) : (
+                summary ? "Regenerate Summary" : "Generate Summary"
+              )}
+            </button>
+          </div>
+        </div>
 
-                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                  <ResultBadge result={g.latest?.result} />
-                  <Counts c={latestCounts} />
-                </div>
+        <div className="px-6 py-4">
+          {summaryError && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
+              <strong>Error:</strong> {summaryError}
+            </div>
+          )}
 
-                {/* tiny outcome spark (per chamber outcome) */}
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                  {g.votes.slice(0, 8).map((v) => (
-                    <span key={v.roll} title={`#${v.roll} • ${v.question || ""}`} style={{
-                      width: 9, height: 9, borderRadius: 2, display: "inline-block",
-                      background:
-                        classifyResult(v.result) === "passed" ? "#86efac" :
-                        classifyResult(v.result) === "failed" ? "#fca5a5" : "#d1d5db"
-                    }} />
-                  ))}
-                  {g.votes.length > 8 && (
-                    <span style={{ color: TOKENS.textMuted, fontSize: 12 }}>+{g.votes.length - 8}</span>
-                  )}
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <PositionChip pos={latestMemberPos} />
+          {summary ? (
+            <div className="prose max-w-none">
+              {/* Display the full Gemini summary with basic markdown formatting */}
+              <div className="mb-4">
+                <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {summary.tldr.split('\n').map((line, index) => {
+                    // Handle markdown-style headers
+                    if (line.startsWith('## ')) {
+                      return (
+                        <h3 key={index} className="text-lg font-semibold mt-6 mb-3 text-gray-900">
+                          {line.replace('## ', '')}
+                        </h3>
+                      );
+                    }
+                    // Handle bold text
+                    if (line.includes('**')) {
+                      const parts = line.split('**');
+                      return (
+                        <p key={index} className="mb-2">
+                          {parts.map((part, i) => 
+                            i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+                          )}
+                        </p>
+                      );
+                    }
+                    // Handle bullet points
+                    if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+                      return (
+                        <li key={index} className="ml-4 mb-1">
+                          {line.trim().substring(2)}
+                        </li>
+                      );
+                    }
+                    // Handle numbered lists
+                    if (line.trim().match(/^\d+\.\s/)) {
+                      return (
+                        <li key={index} className="ml-4 mb-1 list-decimal">
+                          {line.trim().replace(/^\d+\.\s/, '')}
+                        </li>
+                      );
+                    }
+                    // Regular paragraphs
+                    if (line.trim()) {
+                      return <p key={index} className="mb-3">{line}</p>;
+                    }
+                    // Empty lines
+                    return <br key={index} />;
+                  })}
                 </div>
               </div>
 
-              {/* Expanded inner table (member’s roll calls for this bill) */}
-              {isOpen && (
-                <div style={{ padding: 10, background: "#FBFCFE" }}>
-                  <div style={{ overflowX: "auto" }}>
-                    <table cellPadding={0} style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
-                      <thead style={{ position: "sticky", top: 0, background: "#FBFCFE", zIndex: 1 }}>
-                        <tr>
-                          {["Roll", "Question", "Chamber Result", "Member Vote", "Date", ""].map((h, i) => (
-                            <th key={i} align={i === 5 ? "right" : "left"} style={headCell}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {g.votes.map((v, idx) => {
-                          const zebra = idx % 2 === 1 ? { background: "#F7F9FD" } : null;
-                          return (
-                            <tr key={v.roll} style={{ borderTop: `1px solid ${TOKENS.borderSubtle}`, ...zebra }}>
-                              <td style={cell}>#{v.roll}</td>
-                              <td style={{ ...cell, minWidth: 280 }}>{v.question || "—"}</td>
-                              <td style={cell}><ResultBadge result={v.result} /></td>
-                              <td style={cell}><PositionChip pos={v.position} /></td>
-                              <td style={{ ...cell, whiteSpace: "nowrap" }}>{String(v.started || "").slice(0,10)}</td>
-                              <td style={{ ...cell, textAlign: "right" }}>
-                                {onOpenRoll ? (
-                                  <button
-                                    onClick={() => onOpenRoll({ congress, session: v.session ?? session, roll: v.roll })}
-                                    style={rowBtn}
-                                  >
-                                    Open roll
-                                  </button>
-                                ) : null}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+              {/* Show metadata at the bottom */}
+              <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-500">
+                <div className="flex items-center gap-4">
+                  {summary.importance && (
+                    <div className="flex items-center gap-1">
+                      <span>Importance:</span>
+                      <div className="flex">
+                        {[...Array(5)].map((_, i) => (
+                          <span
+                            key={i}
+                            className={`text-sm ${i < summary.importance ? "text-yellow-400" : "text-gray-300"}`}
+                          >
+                            ⭐
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {summary.readingTime && (
+                    <span>📖 Reading time: {summary.readingTime}</span>
+                  )}
                 </div>
+                {summary.cached && (
+                  <span className="text-green-600">✓ Cached</span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <div className="text-4xl mb-2">🤖</div>
+              <p>Click "Generate Summary" to create an AI-powered analysis of this bill.</p>
+              <p className="text-sm mt-2">
+                Our AI will analyze the bill text and provide key insights, financial impact, and importance scoring.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bill Details */}
+      <div className="bg-white border border-gray-300 rounded-lg shadow-sm mb-6">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">📋 Bill Details</h2>
+        </div>
+
+        <div className="px-6 py-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-1">Bill Type</h3>
+              <p className="text-gray-700 mb-4">
+                {billType.toUpperCase()} - {
+                  billType.toLowerCase() === 'hres' ? 'House Resolution' :
+                    billType.toLowerCase() === 'hr' ? 'House Bill' :
+                      billType.toLowerCase() === 'sres' ? 'Senate Resolution' :
+                        billType.toLowerCase() === 's' ? 'Senate Bill' :
+                          billType.toLowerCase() === 'hjres' ? 'House Joint Resolution' :
+                            billType.toLowerCase() === 'sjres' ? 'Senate Joint Resolution' :
+                              'Congressional Legislation'
+                }
+              </p>
+
+              <h3 className="font-semibold text-gray-900 mb-1">Congress</h3>
+              <p className="text-gray-700 mb-4">{congress}th Congress (2025-2026)</p>
+
+              {billData?.votes && billData.votes.length > 0 && (
+                <>
+                  <h3 className="font-semibold text-gray-900 mb-1">Vote History</h3>
+                  <p className="text-gray-700">{billData.votes.length} roll call vote{billData.votes.length !== 1 ? 's' : ''}</p>
+                </>
               )}
             </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
-/* ================= small bits ================= */
-function Chip({ children, color = "#eef2ff", onClick, title }) {
-  return (
-    <button
-      title={title}
-      onClick={onClick}
-      style={{
-        border: `1px solid ${TOKENS.border}`,
-        background: color,
-        borderRadius: 999,
-        padding: "4px 10px",
-        cursor: onClick ? "pointer" : "default",
-        fontWeight: 700,
-        fontSize: 12,
-      }}
-    >
-      {children}
-    </button>
+            <div>
+              {billData?.sponsor && (
+                <>
+                  <h3 className="font-semibold text-gray-900 mb-1">Sponsor</h3>
+                  <p className="text-gray-700 mb-4">{billData.sponsor}</p>
+                </>
+              )}
+
+              {billData?.committees && billData.committees.length > 0 && (
+                <>
+                  <h3 className="font-semibold text-gray-900 mb-1">Committees</h3>
+                  <ul className="text-gray-700 mb-4">
+                    {billData.committees.map((committee, index) => (
+                      <li key={index}>{committee}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {billData?.introducedDate && (
+                <>
+                  <h3 className="font-semibold text-gray-900 mb-1">Introduced</h3>
+                  <p className="text-gray-700 mb-4">
+                    {new Date(billData.introducedDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </>
+              )}
+            </div>
+
+            {billData?.latestAction && (
+              <div className="md:col-span-2">
+                <h3 className="font-semibold text-gray-900 mb-1">Latest Action</h3>
+                <p className="text-gray-700">{billData.latestAction}</p>
+              </div>
+            )}
+          </div>
+
+          {(!billData?.sponsor && !billData?.committees && !billData?.latestAction && !billData?.introducedDate) && (
+            <div className="text-center py-4 text-gray-500">
+              <p>Additional bill details are not available in our database.</p>
+              <p className="text-sm mt-1">You can view voting history and generate an AI summary above.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Roll Call Votes */}
+      {billData?.votes && billData.votes.length > 0 ? (
+        <div className="bg-white border border-gray-300 rounded-lg shadow-sm">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">🗳️ Roll Call Votes ({billData.votes.length})</h2>
+          </div>
+
+          <div className="px-6 py-4">
+            <div className="space-y-3">
+              {billData.votes.map((vote, index) => (
+                <div key={vote.roll || index} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900 mb-1">
+                      Roll #{vote.roll} - {vote.question || "Vote on the Resolution"}
+                    </div>
+                    <div className="text-sm text-gray-500 mb-2">
+                      {vote.started && new Date(vote.started).toLocaleDateString()} •
+                      Result: <span className={`font-medium ${vote.result?.toLowerCase().includes('pass') || vote.result?.toLowerCase().includes('agreed')
+                          ? 'text-green-600'
+                          : vote.result?.toLowerCase().includes('fail')
+                            ? 'text-red-600'
+                            : 'text-gray-600'
+                        }`}>
+                        {vote.result || "Unknown"}
+                      </span>
+                    </div>
+                    {vote.yeaCount !== undefined && (
+                      <div className="flex gap-4 text-xs text-gray-600">
+                        <span className="text-green-600">Yea: {vote.yeaCount || 0}</span>
+                        <span className="text-red-600">Nay: {vote.nayCount || 0}</span>
+                        <span className="text-gray-500">Present: {vote.presentCount || 0}</span>
+                        <span className="text-amber-600">Not Voting: {vote.notVotingCount || 0}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => onOpenRoll && onOpenRoll({
+                      congress: vote.congress || congress,
+                      session: vote.session || 1,
+                      roll: vote.roll
+                    })}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer text-sm font-medium"
+                  >
+                    View Details
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white border border-gray-300 rounded-lg shadow-sm">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">🗳️ Roll Call Votes</h2>
+          </div>
+
+          <div className="px-6 py-8 text-center text-gray-500">
+            <div className="text-4xl mb-2">📭</div>
+            <p>No roll call votes found for this bill.</p>
+            <p className="text-sm mt-1">This bill may not have been voted on yet, or votes may not be available in our database.</p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
