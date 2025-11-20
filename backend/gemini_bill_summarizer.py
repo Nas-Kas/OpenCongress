@@ -132,6 +132,11 @@ class GeminiBillSummarizer:
             
             # Parse the response into structured data
             summary_text = response.text
+            
+            if not summary_text:
+                print("Error: Gemini returned empty response")
+                return None
+            
             parsed_summary = self._parse_gemini_response(summary_text, is_truncated)
             
             return parsed_summary
@@ -181,6 +186,9 @@ Please write in clear, accessible language that a general audience can understan
         Return the full Gemini response with minimal processing
         """
         try:
+            if not response_text:
+                raise ValueError("Response text is empty")
+            
             # Calculate basic metrics
             word_count = len(response_text.split())
             reading_time = max(1, word_count // 200)  # ~200 words per minute
