@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AskBill from "./AskBill";
 
 export default function BillPage({ congress, billType, billNumber, onBack, onOpenRoll }) {
   const [billData, setBillData] = useState(null);
@@ -416,6 +417,13 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
           </div>
         </div>
       )}
+
+      {/* Ask Bill RAG Component */}
+      <AskBill 
+        congress={congress} 
+        billType={billType} 
+        billNumber={billNumber} 
+      />
     </div>
   );
 }

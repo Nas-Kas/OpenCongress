@@ -180,8 +180,8 @@ export default function App() {
           }}
         />
         <div className="mb-3 grid grid-cols-[auto_1fr] gap-3">
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={() => setSelectedMember(null)}
             className="px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 cursor-pointer"
           >
@@ -242,11 +242,10 @@ export default function App() {
               setShowVotedBillsList(true);
               setSelectedVote(null);
             }}
-            className={`px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${
-              showVotedBillsList 
-                ? "bg-primary-weak text-primary" 
-                : "bg-transparent text-gray-900"
-            }`}
+            className={`px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${showVotedBillsList
+              ? "bg-primary-weak text-primary"
+              : "bg-transparent text-gray-900"
+              }`}
           >
             📊 Vote Overview
           </button>
@@ -256,11 +255,10 @@ export default function App() {
               if (!selectedVote)
                 setSelectedVote({ congress: 119, session: 1, roll: 1 });
             }}
-            className={`px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${
-              !showVotedBillsList 
-                ? "bg-primary-weak text-primary" 
-                : "bg-transparent text-gray-900"
-            }`}
+            className={`px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${!showVotedBillsList
+              ? "bg-primary-weak text-primary"
+              : "bg-transparent text-gray-900"
+              }`}
           >
             👥 Vote by Member
           </button>
@@ -321,9 +319,9 @@ export default function App() {
                   {meta.source && (
                     <>
                       •{" "}
-                      <a 
-                        href={meta.source} 
-                        target="_blank" 
+                      <a
+                        href={meta.source}
+                        target="_blank"
                         rel="noreferrer"
                         className="text-primary underline hover:text-blue-800"
                       >
@@ -383,11 +381,10 @@ export default function App() {
 }
 
 function NavTabs({ active = "rolls", onChange }) {
-  const getTabClasses = (isActive) => 
-    `px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${
-      isActive ? "bg-primary-weak text-primary" : "bg-transparent text-gray-900"
+  const getTabClasses = (isActive) =>
+    `px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${isActive ? "bg-primary-weak text-primary" : "bg-transparent text-gray-900"
     }`;
-  
+
   return (
     <div className="flex gap-2 flex-wrap">
       <button

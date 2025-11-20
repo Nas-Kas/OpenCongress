@@ -12,24 +12,24 @@ export default function BillsWithoutVotes() {
   const loadBills = async (newOffset = 0) => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const params = new URLSearchParams({
         congress: congress.toString(),
         limit: pagination.limit.toString(),
         offset: newOffset.toString()
       });
-      
+
       if (billType) {
         params.append("bill_type", billType);
       }
-      
+
       const response = await fetch(`http://127.0.0.1:8000/bills/no-votes?${params}`);
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch bills: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       setBills(data.bills);
       setPagination({
@@ -74,15 +74,15 @@ export default function BillsWithoutVotes() {
 
   const getLatestActionText = (latestAction) => {
     if (!latestAction) return "No recent action";
-    
+
     if (typeof latestAction === 'string') {
       return latestAction;
     }
-    
+
     if (typeof latestAction === 'object' && latestAction.text) {
       return latestAction.text;
     }
-    
+
     return "No recent action";
   };
 
@@ -122,7 +122,7 @@ export default function BillsWithoutVotes() {
           📋 Early-Stage Bills
         </h1>
         <p className="m-0 text-gray-500 text-base leading-relaxed">
-          Bills that haven't had House votes yet 
+          Bills that haven't had House votes yet
         </p>
       </div>
 
@@ -209,16 +209,16 @@ export default function BillsWithoutVotes() {
                       Introduced: {formatDate(bill.introducedDate)}
                     </span>
                   </div>
-                  
+
                   <h3 className="m-0 mb-3 text-lg leading-relaxed text-gray-800">
                     {bill.title || `${bill.billType.toUpperCase()} ${bill.billNumber}`}
                   </h3>
-                  
+
                   <div className="text-sm text-gray-500 leading-relaxed">
                     <strong>Latest Action:</strong> {getLatestActionText(bill.latestAction)}
                   </div>
                 </div>
-                
+
                 <div className="bg-green-50 text-green-800 px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ml-4">
                   🎯 No Votes Yet
                 </div>
@@ -234,27 +234,25 @@ export default function BillsWithoutVotes() {
           <button
             onClick={handlePrevPage}
             disabled={pagination.offset === 0}
-            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${
-              pagination.offset === 0 
-                ? "bg-gray-50 text-gray-400 cursor-not-allowed" 
-                : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
-            }`}
+            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${pagination.offset === 0
+              ? "bg-gray-50 text-gray-400 cursor-not-allowed"
+              : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
+              }`}
           >
             ← Previous
           </button>
-          
+
           <span className="text-sm text-gray-500">
             Page {Math.floor(pagination.offset / pagination.limit) + 1} of {Math.ceil(pagination.total / pagination.limit)}
           </span>
-          
+
           <button
             onClick={handleNextPage}
             disabled={!pagination.hasMore}
-            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${
-              !pagination.hasMore 
-                ? "bg-gray-50 text-gray-400 cursor-not-allowed" 
-                : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
-            }`}
+            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${!pagination.hasMore
+              ? "bg-gray-50 text-gray-400 cursor-not-allowed"
+              : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
+              }`}
           >
             Next →
           </button>
