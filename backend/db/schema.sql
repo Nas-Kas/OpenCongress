@@ -1,3 +1,8 @@
+-- === Extensions ===
+
+-- Enable pgvector for RAG embeddings
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- === Core tables ===
 
 CREATE TABLE IF NOT EXISTS members (
@@ -96,6 +101,32 @@ CREATE TABLE IF NOT EXISTS bill_summaries (
 );
 
 CREATE INDEX IF NOT EXISTS bill_summaries_created_idx ON bill_summaries (created_at DESC);
+
+-- === RAG System Tables ===
+
+-- Store bill text chunks with embeddings for semantic search
+CREATE TABLE IF NOT EXISTS bill_chunks (
+  chunk_id    SERIAL PRIMARY KEY,
+  congress    INT NOT NULL,
+  bill_type   TEXT NOT NULL,
+  bill_number TEXT NOT NULL,
+  chunk_index INT NOT NULL,  -- Order of chunk in the bill
+  text        TEXT NOT NULL,  -- The actual chunk text
+  embedding   VECTOR(768),    -- Gemini embedding dimension
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  FOREIGN KEY (congress, bill_type, bill_number) 
+    REFERENCES bills (congress, bill_type, bill_number) 
+    ON DELETE CASCADE,
+  UNIQUE (congress, bill_type, bill_number, chunk_index)
+);
+
+-- Index for vector similarity search
+CREATE INDEX IF NOT EXISTS bill_chunks_embedding_idx ON bill_chunks 
+  USING ivfflat (embedding vector_cosine_ops)
+  WITH (lists = 100);
+
+-- Index for filtering by bill
+CREATE INDEX IF NOT EXISTS bill_chunks_bill_idx ON bill_chunks (congress, bill_type, bill_number);
 
 -- === Betting System Tables ===
 
