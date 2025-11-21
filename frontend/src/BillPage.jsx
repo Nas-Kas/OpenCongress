@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AskBill from "./AskBill";
+import { LoadingSpinner, ErrorMessage } from "./components";
 
 export default function BillPage({ congress, billType, billNumber, onBack, onOpenRoll }) {
   const [billData, setBillData] = useState(null);
@@ -8,6 +9,7 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [error, setError] = useState(null);
   const [summaryError, setSummaryError] = useState(null);
+  const [expandTitle, setExpandTitle] = useState(false);
 
   useEffect(() => {
     const fetchBillData = async () => {
@@ -99,20 +101,11 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-10 gap-3">
-        <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
-        <span>Loading bill details...</span>
-      </div>
-    );
+    return <LoadingSpinner message="Loading bill details..." />;
   }
 
   if (error) {
-    return (
-      <div className="p-5 bg-red-50 border border-red-200 rounded-lg text-red-600">
-        <strong>Error loading bill:</strong> {error}
-      </div>
-    );
+    return <ErrorMessage message={error} title="Error loading bill:" />;
   }
 
   return (
@@ -137,7 +130,11 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
           </div>
 
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {billData?.title || `${billType.toUpperCase()} ${billNumber}`}
+            {expandTitle ? billData?.title : billData?.title?.substring(0,80) + "... "}
+            <button onClick={() => setExpandTitle(!expandTitle)} className="text-sm text-blue-600 ml-2">
+              {expandTitle ? 'Show less' : 'Show more'}
+            </button>
+            {/* {billData?.title || `${billType.toUpperCase()} ${billNumber}`} */}
           </h1>
 
           {billData?.introducedDate && (

@@ -1,33 +1,5 @@
 import { useMemo, useState } from "react";
-
-function VoteChip({ pos }) {
-  const p = pos || "—";
-  const getVoteClasses = (vote) => {
-    const baseClasses = "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold";
-    switch (vote) {
-      case "Yea":
-        return `${baseClasses} bg-vote-yea-bg text-vote-yea-fg`;
-      case "Nay":
-        return `${baseClasses} bg-vote-nay-bg text-vote-nay-fg`;
-      case "Present":
-        return `${baseClasses} bg-vote-present-bg text-vote-present-fg`;
-      case "Not Voting":
-        return `${baseClasses} bg-vote-nv-bg text-vote-nv-fg`;
-      default:
-        return `${baseClasses} bg-vote-present-bg text-vote-present-fg`;
-    }
-  };
-
-  return (
-    <span
-      aria-label={`Vote: ${p}`}
-      title={`Vote: ${p}`}
-      className={getVoteClasses(p)}
-    >
-      {p}
-    </span>
-  );
-}
+import { VoteButton } from "./components";
 
 export default function VotesTable({ rows = [], onOpenMember }) {
   const [sortKey, setSortKey] = useState("name");
@@ -174,7 +146,7 @@ export default function VotesTable({ rows = [], onOpenMember }) {
                 <td className="px-3 py-2.5 text-gray-900 text-sm">{m.party}</td>
                 <td className="px-3 py-2.5 text-gray-900 text-sm">{m.state}</td>
                 <td className="px-3 py-2.5 text-gray-900 text-sm">
-                  <VoteChip pos={m.position} />
+                  <VoteButton vote={m.position} />
                 </td>
               </tr>
             ))}

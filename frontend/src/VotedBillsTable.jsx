@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ResultBadge, VoteButton } from "./components";
 
 
 
@@ -18,19 +19,6 @@ function getCounts(v = {}) {
     present: v.presentCount ?? 0,
     notVoting: v.notVotingCount ?? 0,
   };
-}
-
-function ResultBadge({ result }) {
-  const cls = classifyResult(result);
-  const colorClass =
-    cls === "passed" ? "bg-green-50 text-green-800" :
-      cls === "failed" ? "bg-red-50 text-red-800" : "bg-gray-50 text-gray-800";
-
-  return (
-    <span className={`${colorClass} px-2.5 py-1 rounded-full text-xs font-bold`}>
-      {result || "—"}
-    </span>
-  );
 }
 
 function CountChip({ label, value }) {

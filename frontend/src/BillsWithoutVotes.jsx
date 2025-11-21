@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import EducationalTooltip from "./EducationalTooltip";
+import { LoadingSpinner, ErrorMessage, BillCard } from "./components";
 
 export default function BillsWithoutVotes() {
   const [bills, setBills] = useState([]);
@@ -59,33 +60,6 @@ export default function BillsWithoutVotes() {
     loadBills(newOffset);
   };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "Unknown";
-    try {
-      return new Date(dateStr).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
-  const getLatestActionText = (latestAction) => {
-    if (!latestAction) return "No recent action";
-
-    if (typeof latestAction === 'string') {
-      return latestAction;
-    }
-
-    if (typeof latestAction === 'object' && latestAction.text) {
-      return latestAction.text;
-    }
-
-    return "No recent action";
-  };
-
   const navigateToBill = (bill) => {
     const url = new URL(window.location);
     url.searchParams.set('congress', bill.congress);
@@ -98,20 +72,11 @@ export default function BillsWithoutVotes() {
   };
 
   if (loading && bills.length === 0) {
-    return (
-      <div className="flex items-center justify-center p-10 gap-3">
-        <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
-        <span>Loading bills without votes...</span>
-      </div>
-    );
+    return <LoadingSpinner message="Loading bills without votes..." />;
   }
 
   if (error) {
-    return (
-      <div className="p-5 bg-red-50 border border-red-200 rounded-lg text-red-600">
-        <strong>Error loading bills:</strong> {error}
-      </div>
-    );
+    return <ErrorMessage message={error} title="Error loading bills:" />;
   }
 
   return (
@@ -194,36 +159,12 @@ export default function BillsWithoutVotes() {
       ) : (
         <div className="grid gap-4">
           {bills.map((bill) => (
-            <div
+            <BillCard
               key={`${bill.congress}-${bill.billType}-${bill.billNumber}`}
-              className="border border-gray-300 rounded-lg p-5 bg-white transition-all duration-200 cursor-pointer hover:border-blue-600 hover:shadow-lg hover:shadow-blue-100"
+              bill={bill}
+              badge="🎯 No Votes Yet"
               onClick={() => navigateToBill(bill)}
-            >
-              <div className="flex justify-between items-start mb-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-semibold">
-                      {bill.billType.toUpperCase()} {bill.billNumber}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      Introduced: {formatDate(bill.introducedDate)}
-                    </span>
-                  </div>
-
-                  <h3 className="m-0 mb-3 text-lg leading-relaxed text-gray-800">
-                    {bill.title || `${bill.billType.toUpperCase()} ${bill.billNumber}`}
-                  </h3>
-
-                  <div className="text-sm text-gray-500 leading-relaxed">
-                    <strong>Latest Action:</strong> {getLatestActionText(bill.latestAction)}
-                  </div>
-                </div>
-
-                <div className="bg-green-50 text-green-800 px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ml-4">
-                  🎯 No Votes Yet
-                </div>
-              </div>
-            </div>
+            />
           ))}
         </div>
       )}
