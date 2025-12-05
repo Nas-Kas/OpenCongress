@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+
 /* ================= UI tokens ================= */
 const TOKENS = {
   radius: 10,
@@ -199,7 +201,7 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
     setData(null);
 
     fetch(
-      `http://127.0.0.1:8000/member/${bioguideId}/house-votes?congress=${congress}&session=${session}&window=200`,
+      `${API_URL}/member/${bioguideId}/house-votes?congress=${congress}&session=${session}&window=200`,
       { signal: ctrl.signal }
     )
       .then((r) => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); })

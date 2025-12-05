@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ResultBadge, VoteButton } from "./components";
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+
 
 
 
@@ -79,7 +81,7 @@ export default function VotedBillsTable({
     setErr(null);
     setData(null);
     fetch(
-      `http://127.0.0.1:8000/house/votes?congress=${congress}&session=${session}&window=200`,
+      `${API_URL}/house/votes?congress=${congress}&session=${session}&window=200`,
       { signal: ctrl.signal }
     )
       .then((r) => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); })

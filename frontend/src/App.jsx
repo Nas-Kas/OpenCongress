@@ -8,6 +8,8 @@ import BillPage from "./BillPage";
 import BillsWithoutVotes from "./BillsWithoutVotes";
 import { LoadingSpinner, ErrorMessage } from "./components";
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+
 
 const getQS = () => new URLSearchParams(window.location.search);
 const setQS = (obj) => {
@@ -104,7 +106,7 @@ export default function App() {
     setError(null);
 
     fetch(
-      `http://127.0.0.1:8000/house/vote-detail?congress=${congress}&session=${session}&roll=${roll}`
+      `${API_URL}/house/vote-detail?congress=${congress}&session=${session}&roll=${roll}`
     )
       .then(async (r) => {
         if (r.status === 404)
@@ -305,7 +307,7 @@ export default function App() {
                   setLoadingVotes(true);
                   const { congress, session, roll } = selectedVote;
                   fetch(
-                    `http://127.0.0.1:8000/house/vote-detail?congress=${congress}&session=${session}&roll=${roll}`
+                    `${API_URL}/house/vote-detail?congress=${congress}&session=${session}&roll=${roll}`
                   )
                     .then(async (r) => {
                       if (r.status === 404)

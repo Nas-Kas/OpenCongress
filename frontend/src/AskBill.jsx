@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+
 export default function AskBill({ congress, billType, billNumber }) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState(null);
@@ -12,7 +14,7 @@ export default function AskBill({ congress, billType, billNumber }) {
   const checkIfEmbedded = async () => {
     try {
       const response = await fetch(
-        `http://localhost:8000/bill/${congress}/${billType}/${billNumber}/ask`,
+        `${API_URL}/bill/${congress}/${billType}/${billNumber}/ask`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -55,7 +57,7 @@ export default function AskBill({ congress, billType, billNumber }) {
       setEmbeddingProgress('Looking up PDF URL from database...');
       
       const embedResponse = await fetch(
-        `http://localhost:8000/bill/${congress}/${billType}/${billNumber}/embed`,
+        `${API_URL}/bill/${congress}/${billType}/${billNumber}/embed`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -90,7 +92,7 @@ export default function AskBill({ congress, billType, billNumber }) {
 
     try {
       const response = await fetch(
-        `http://localhost:8000/bill/${congress}/${billType}/${billNumber}/ask`,
+        `${API_URL}/bill/${congress}/${billType}/${billNumber}/ask`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+
 export default function BillSelector({ onSelect }) {
   const [votes, setVotes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -12,7 +14,7 @@ export default function BillSelector({ onSelect }) {
 
   useEffect(() => {
     fetch(
-      `http://127.0.0.1:8000/house/votes?congress=${CONGRESS}&session=${SESSION}&limit=50&include_titles=1&include_questions=1`
+      `${API_URL}/house/votes?congress=${CONGRESS}&session=${SESSION}&limit=50&include_titles=1&include_questions=1`
     )
       .then((r) => {
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);

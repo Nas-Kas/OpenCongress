@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+
 export default function MemberSearch({ onSelect, placeholder = "Search members by name, ID, state, or party…" }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
@@ -24,7 +26,7 @@ export default function MemberSearch({ onSelect, placeholder = "Search members b
       if (abortRef.current) abortRef.current.abort();
       abortRef.current = new AbortController();
       try {
-        const r = await fetch(`http://127.0.0.1:8000/search/members?q=${encodeURIComponent(q)}&limit=10`, {
+        const r = await fetch(`${API_URL}/search/members?q=${encodeURIComponent(q)}&limit=10`, {
           signal: abortRef.current.signal
         });
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);

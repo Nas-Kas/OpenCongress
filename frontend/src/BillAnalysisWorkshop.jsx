@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+
 export default function BillAnalysisWorkshop() {
   const [selectedBill, setSelectedBill] = useState(null);
   const [analysisStep, setAnalysisStep] = useState(0);
@@ -13,7 +15,7 @@ export default function BillAnalysisWorkshop() {
 
   const loadSampleBills = async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/bills?limit=5");
+      const response = await fetch(`${API_URL}/bills?limit=5`);
       if (response.ok) {
         const data = await response.json();
         setBills(data);

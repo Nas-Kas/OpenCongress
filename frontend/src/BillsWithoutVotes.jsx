@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import EducationalTooltip from "./EducationalTooltip";
 import { LoadingSpinner, ErrorMessage, BillCard } from "./components";
+import EducationalTooltip from "./EducationalTooltip";
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
 export default function BillsWithoutVotes() {
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +26,7 @@ export default function BillsWithoutVotes() {
         params.append("bill_type", billType);
       }
 
-      const response = await fetch(`http://127.0.0.1:8000/bills/no-votes?${params}`);
+      const response = await fetch(`${API_URL}/bills/no-votes?${params}`);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch bills: ${response.statusText}`);

@@ -2,23 +2,21 @@ import { useEffect, useState } from "react";
 import AskBill from "./AskBill";
 import { LoadingSpinner, ErrorMessage } from "./components";
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+
 export default function BillPage({ billData: initialBillData, congress, billType, billNumber, onBack, onOpenRoll }) {
-  // Try to get bill data from history state first (when navigating from BillsWithoutVotes)
-  const historyBillData = typeof window !== 'undefined' ? window.history.state?.billData : null;
-  const passedBillData = initialBillData || historyBillData;
-  
-  const [billData, setBillData] = useState(passedBillData || null);
+  const [billData, setBillData] = useState(initialBillData || null);
   const [summary, setSummary] = useState(null);
-  const [loading, setLoading] = useState(!passedBillData);
+  const [loading, setLoading] = useState(!initialBillData);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [error, setError] = useState(null);
   const [summaryError, setSummaryError] = useState(null);
   const [expandTitle, setExpandTitle] = useState(false);
 
   useEffect(() => {
-    // If we already have bill data passed in, use it
-    if (passedBillData && passedBillData.title) {
-      setBillData(passedBillData);
+    // If we already have bill data passed in, use it immediately
+    if (initialBillData && initialBillData.title && initialBillData.votes) {
+      setBillData(initialBillData);
       setLoading(false);
       return;
     }
@@ -36,41 +34,28 @@ export default function BillPage({ billData: initialBillData, congress, billType
       try {
         console.log("Fetching bill data for:", { congress, billType, billNumber });
 
-        // Fetch bill votes and details using the existing API pattern
-        const votesResponse = await fetch(
-          `http://127.0.0.1:8000/house/votes?congress=${congress}&session=1&limit=200&include_titles=1&include_questions=1`
+        // Fetch bill details and votes from the dedicated bill endpoint
+        const billResponse = await fetch(
+          `${API_URL}/bill/${congress}/${billType}/${billNumber}`
         );
 
-        if (!votesResponse.ok) {
-          throw new Error(`Failed to fetch votes: ${votesResponse.statusText}`);
+        if (!billResponse.ok) {
+          throw new Error(`Failed to fetch bill: ${billResponse.statusText}`);
         }
 
-        const votesData = await votesResponse.json();
-
-        // Filter votes for this specific bill
-        const billVotes = votesData.votes?.filter(vote =>
-          vote.legislationType?.toLowerCase() === billType.toLowerCase() &&
-          String(vote.legislationNumber) === String(billNumber)
-        ) || [];
-
-        console.log("Found votes for bill:", billVotes);
-
-        // Use the first vote to get bill details, or create a basic structure
-        const billInfo = billVotes.length > 0 ? billVotes[0] : {
-          title: `${billType.toUpperCase()} ${billNumber}`,
-          legislationType: billType,
-          legislationNumber: billNumber,
-          congress: congress
-        };
+        const billData = await billResponse.json();
+        console.log("Fetched bill data:", billData);
 
         const finalBillData = {
-          ...billInfo,
-          votes: billVotes,
-          title: billInfo.title || `${billType.toUpperCase()} ${billNumber}`,
-          introducedDate: billInfo.introducedDate,
-          sponsor: billInfo.sponsor,
-          committees: billInfo.committees,
-          latestAction: billInfo.latestAction
+          congress: billData.bill.congress,
+          billType: billData.bill.billType,
+          billNumber: billData.bill.billNumber,
+          title: billData.bill.title || `${billType.toUpperCase()} ${billNumber}`,
+          introducedDate: billData.bill.introducedDate,
+          latestAction: billData.bill.latestAction,
+          publicUrl: billData.bill.publicUrl,
+          textVersions: billData.bill.textVersions,
+          votes: billData.votes || []
         };
 
         console.log("Setting bill data:", finalBillData);
@@ -84,7 +69,7 @@ export default function BillPage({ billData: initialBillData, congress, billType
     };
 
     fetchBillData();
-  }, [congress, billType, billNumber, passedBillData]);
+  }, [congress, billType, billNumber, initialBillData]);
 
   useEffect(() => {
     console.log("Full bill data:", billData);
@@ -97,7 +82,7 @@ export default function BillPage({ billData: initialBillData, congress, billType
     try {
       // Try the generate-summary endpoint, but handle if it doesn't exist
       const response = await fetch(
-        `http://127.0.0.1:8000/bill/${congress}/${billType}/${billNumber}/generate-summary`,
+        `${API_URL}/bill/${congress}/${billType}/${billNumber}/generate-summary`,
         { method: 'POST' }
       );
 
@@ -391,7 +376,17 @@ export default function BillPage({ billData: initialBillData, congress, billType
       </div>
 
       {/* Roll Call Votes */}
-      {billData?.votes && billData.votes.length > 0 ? (
+      {!billData ? (
+        <div className="bg-white border border-gray-300 rounded-lg shadow-sm">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">🗳️ Roll Call Votes</h2>
+          </div>
+          <div className="px-6 py-8 text-center text-gray-500">
+            <div className="animate-spin inline-block w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full"></div>
+            <p className="mt-2">Loading votes...</p>
+          </div>
+        </div>
+      ) : billData.votes && billData.votes.length > 0 ? (
         <div className="bg-white border border-gray-300 rounded-lg shadow-sm">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900">🗳️ Roll Call Votes ({billData.votes.length})</h2>
