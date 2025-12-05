@@ -116,7 +116,7 @@ async def list_house_votes(
                 LEFT JOIN bills b
                   ON b.congress = hv.congress
                  AND b.bill_type = LOWER(hv.legislation_type)
-                 AND b.bill_number = hv.legislation_number
+                 AND CAST(b.bill_number AS TEXT) = CAST(hv.legislation_number AS TEXT)
                 WHERE hv.congress = $2
                 ORDER BY hv.started DESC NULLS LAST, hv.roll DESC
                 LIMIT $3 OFFSET $4
@@ -136,7 +136,7 @@ async def list_house_votes(
                 LEFT JOIN bills b
                   ON b.congress = hv.congress
                  AND b.bill_type = LOWER(hv.legislation_type)
-                 AND b.bill_number = hv.legislation_number
+                 AND CAST(b.bill_number AS TEXT) = CAST(hv.legislation_number AS TEXT)
                 WHERE hv.congress = $2 AND hv.session = $3
                 ORDER BY hv.started DESC NULLS LAST, hv.roll DESC
                 LIMIT $4 OFFSET $5

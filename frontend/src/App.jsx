@@ -6,6 +6,7 @@ import MemberPage from "./MemberPage";
 import MemberSearch from "./MemberSearch";
 import BillPage from "./BillPage";
 import BillsWithoutVotes from "./BillsWithoutVotes";
+import { LoadingSpinner, ErrorMessage } from "./components";
 
 
 const getQS = () => new URLSearchParams(window.location.search);
@@ -64,6 +65,7 @@ export default function App() {
         congress: Number(congress || 119),
         billType: billType.toLowerCase(),
         billNumber: billNumber,
+        // title: qs.get("title") || null,
       });
       return;
     }
@@ -135,7 +137,7 @@ export default function App() {
             }
           }}
         />
-        <BillsWithoutVotes />
+        <BillsWithoutVotes onSelectBill={(bill) => setSelectedBill(bill)} />
       </div>
     );
   }
@@ -145,6 +147,7 @@ export default function App() {
     return (
       <div className="p-4 max-w-5xl mx-auto">
         <BillPage
+          billData={selectedBill}
           congress={selectedBill.congress}
           billType={selectedBill.billType}
           billNumber={selectedBill.billNumber}
@@ -179,17 +182,14 @@ export default function App() {
             }
           }}
         />
-        <div className="mb-3 grid grid-cols-[auto_1fr] gap-3">
+        <div className="mb-3">
           <button
             type="button"
             onClick={() => setSelectedMember(null)}
             className="px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 cursor-pointer"
           >
-            ← Back to Roll Calls
+            ← Back
           </button>
-          <MemberSearch
-            onSelect={(id) => id && setSelectedMember(id.toUpperCase())}
-          />
         </div>
         <MemberPage bioguideId={selectedMember} congress={119} session={1} />
       </div>
@@ -216,8 +216,8 @@ export default function App() {
         active={activeTab}
         onChange={(tab) => {
           if (tab === "member") {
-            setSelectedMember("C001130");
-            setQS({ member: "C001130" });
+            setSelectedMember(null);
+            setQS({ member: null });
           } else if (tab === "bills") {
             setShowBillsWithoutVotes(true);
             setSelectedMember(null);
@@ -240,10 +240,9 @@ export default function App() {
           <button
             onClick={() => {
               setShowVotedBillsList(true);
-              setSelectedVote(null);
             }}
             className={`px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${showVotedBillsList
-              ? "bg-primary-weak text-primary"
+              ? "bg-blue-50 text-blue-600"
               : "bg-transparent text-gray-900"
               }`}
           >
@@ -252,11 +251,9 @@ export default function App() {
           <button
             onClick={() => {
               setShowVotedBillsList(false);
-              if (!selectedVote)
-                setSelectedVote({ congress: 119, session: 1, roll: 1 });
             }}
             className={`px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${!showVotedBillsList
-              ? "bg-primary-weak text-primary"
+              ? "bg-blue-50 text-blue-600"
               : "bg-transparent text-gray-900"
               }`}
           >
@@ -281,6 +278,7 @@ export default function App() {
             setSelectedBill(null);
           }}
           onSelectBill={(bill) => {
+            console.log("Selected bill from table:", bill);
             setSelectedBill(bill);
             setSelectedMember(null);
           }}
@@ -298,17 +296,47 @@ export default function App() {
           </div>
 
           {error && (
-            <p className="text-red-600 mt-3">Error: {error}</p>
+            <ErrorMessage 
+              message={error} 
+              title="Error loading vote details:" 
+              onRetry={() => {
+                if (selectedVote) {
+                  setError(null);
+                  setLoadingVotes(true);
+                  const { congress, session, roll } = selectedVote;
+                  fetch(
+                    `http://127.0.0.1:8000/house/vote-detail?congress=${congress}&session=${session}&roll=${roll}`
+                  )
+                    .then(async (r) => {
+                      if (r.status === 404)
+                        return { votes: [], meta: null, counts: null, bill: null };
+                      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+                      return r.json();
+                    })
+                    .then((data) => {
+                      setRows(data.votes || []);
+                      setMeta(data.meta || null);
+                      setCounts(data.counts || null);
+                      setBill(data.bill || null);
+                    })
+                    .catch((e) => setError(String(e)))
+                    .finally(() => setLoadingVotes(false));
+                }
+              }}
+            />
           )}
 
           {!selectedVote ? (
-            <p className="mt-4 text-gray-700">
-              Select a vote to see details.
-            </p>
+            <div className="mt-4 p-6 bg-blue-50 border border-blue-200 rounded-lg text-center">
+              <p className="text-gray-700 mb-2">Select a vote to see details</p>
+              <p className="text-sm text-gray-500">Use the vote picker above to select a specific roll call vote</p>
+            </div>
           ) : loadingVotes ? (
-            <p className="mt-4">Loading vote details…</p>
+            <LoadingSpinner message="Loading vote details..." />
           ) : rows.length === 0 ? (
-            <p className="mt-4">No ballots found for this vote.</p>
+            <div className="mt-4 p-6 bg-gray-50 border border-gray-200 rounded-lg text-center">
+              <p className="text-gray-700">No ballots found for this vote.</p>
+            </div>
           ) : (
             <div className="mt-4">
               {meta && (
@@ -382,7 +410,7 @@ export default function App() {
 
 function NavTabs({ active = "rolls", onChange }) {
   const getTabClasses = (isActive) =>
-    `px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${isActive ? "bg-primary-weak text-primary" : "bg-transparent text-gray-900"
+    `px-3 py-2 rounded-lg border border-gray-300 cursor-pointer font-semibold ${isActive ? "bg-blue-50 text-blue-600" : "bg-transparent text-gray-900"
     }`;
 
   return (

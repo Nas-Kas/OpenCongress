@@ -2,21 +2,40 @@ import { useEffect, useState } from "react";
 import AskBill from "./AskBill";
 import { LoadingSpinner, ErrorMessage } from "./components";
 
-export default function BillPage({ congress, billType, billNumber, onBack, onOpenRoll }) {
-  const [billData, setBillData] = useState(null);
+export default function BillPage({ billData: initialBillData, congress, billType, billNumber, onBack, onOpenRoll }) {
+  // Try to get bill data from history state first (when navigating from BillsWithoutVotes)
+  const historyBillData = typeof window !== 'undefined' ? window.history.state?.billData : null;
+  const passedBillData = initialBillData || historyBillData;
+  
+  const [billData, setBillData] = useState(passedBillData || null);
   const [summary, setSummary] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!passedBillData);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [error, setError] = useState(null);
   const [summaryError, setSummaryError] = useState(null);
   const [expandTitle, setExpandTitle] = useState(false);
 
   useEffect(() => {
+    // If we already have bill data passed in, use it
+    if (passedBillData && passedBillData.title) {
+      setBillData(passedBillData);
+      setLoading(false);
+      return;
+    }
+
+    // Don't fetch if we don't have valid bill identifiers
+    if (!congress || !billType || !billNumber) {
+      console.log("Missing bill identifiers:", { congress, billType, billNumber });
+      return;
+    }
+
     const fetchBillData = async () => {
       setLoading(true);
       setError(null);
 
       try {
+        console.log("Fetching bill data for:", { congress, billType, billNumber });
+
         // Fetch bill votes and details using the existing API pattern
         const votesResponse = await fetch(
           `http://127.0.0.1:8000/house/votes?congress=${congress}&session=1&limit=200&include_titles=1&include_questions=1`
@@ -34,6 +53,8 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
           String(vote.legislationNumber) === String(billNumber)
         ) || [];
 
+        console.log("Found votes for bill:", billVotes);
+
         // Use the first vote to get bill details, or create a basic structure
         const billInfo = billVotes.length > 0 ? billVotes[0] : {
           title: `${billType.toUpperCase()} ${billNumber}`,
@@ -42,7 +63,7 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
           congress: congress
         };
 
-        setBillData({
+        const finalBillData = {
           ...billInfo,
           votes: billVotes,
           title: billInfo.title || `${billType.toUpperCase()} ${billNumber}`,
@@ -50,8 +71,12 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
           sponsor: billInfo.sponsor,
           committees: billInfo.committees,
           latestAction: billInfo.latestAction
-        });
+        };
+
+        console.log("Setting bill data:", finalBillData);
+        setBillData(finalBillData);
       } catch (err) {
+        console.error("Error fetching bill data:", err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -59,7 +84,11 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
     };
 
     fetchBillData();
-  }, [congress, billType, billNumber]);
+  }, [congress, billType, billNumber, passedBillData]);
+
+  useEffect(() => {
+    console.log("Full bill data:", billData);
+  }, [billData]);
 
   const generateSummary = async () => {
     setSummaryLoading(true);
@@ -130,11 +159,18 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
           </div>
 
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {expandTitle ? billData?.title : billData?.title?.substring(0,80) + "... "}
-            <button onClick={() => setExpandTitle(!expandTitle)} className="text-sm text-blue-600 ml-2">
-              {expandTitle ? 'Show less' : 'Show more'}
-            </button>
-            {/* {billData?.title || `${billType.toUpperCase()} ${billNumber}`} */}
+            {billData?.title ? (
+              <>
+                {expandTitle ? billData.title : billData.title.substring(0, 80) + "..."}
+                {billData.title.length > 80 && (
+                  <button onClick={() => setExpandTitle(!expandTitle)} className="text-sm text-blue-600 ml-2">
+                    {expandTitle ? 'Show less' : 'Show more'}
+                  </button>
+                )}
+              </>
+            ) : (
+              `${billType.toUpperCase()} ${billNumber}`
+            )}
           </h1>
 
           {billData?.introducedDate && (
@@ -336,7 +372,11 @@ export default function BillPage({ congress, billType, billNumber, onBack, onOpe
             {billData?.latestAction && (
               <div className="md:col-span-2">
                 <h3 className="font-semibold text-gray-900 mb-1">Latest Action</h3>
-                <p className="text-gray-700">{billData.latestAction}</p>
+                <p className="text-gray-700">
+                  {typeof billData.latestAction === 'object' 
+                    ? billData.latestAction.text 
+                    : billData.latestAction}
+                </p>
               </div>
             )}
           </div>

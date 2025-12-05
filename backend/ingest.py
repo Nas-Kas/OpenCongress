@@ -32,6 +32,19 @@ def pick_vote_block(payload: dict) -> dict:
         if isinstance(vv, dict): return vv
     return {}
 
+# Mapping of procedural vote questions to their associated bills
+# This handles cases where Congress.gov API doesn't provide legislationType/legislationNumber
+PROCEDURAL_VOTE_MAPPINGS = {
+    # Congress 119, Session 1 - H. Con. Res. 58 (Denouncing the horrors of socialism)
+    (119, 1, 305): ("HCONRES", "58"),  # "On Agreeing to the Resolution"
+    (119, 1, 283): ("HCONRES", "58"),  # "On Ordering the Previous Question"
+    (119, 1, 187): ("HCONRES", "58"),  # "On Ordering the Previous Question"
+    (119, 1, 186): ("HCONRES", "58"),  # "On Consideration of the Resolution"
+    (119, 1, 178): ("HCONRES", "58"),  # "On Motion to Adjourn"
+    (119, 1, 169): ("HCONRES", "58"),  # "On Motion to Adjourn"
+    (119, 1, 138): ("HCONRES", "58"),  # "On Motion to Adjourn"
+}
+
 def to_date(v) -> Optional[date]:
     """Parse 'YYYY-MM-DD' or ISO datetime strings into a date, else None."""
     if not v:
@@ -364,6 +377,13 @@ async def ingest_roll(pool: asyncpg.Pool, client: httpx.AsyncClient, congress: i
     legislation_url = rb.get("legislationUrl") or None
     t = (rb.get("legislationType") or "").strip()
     n = (str(rb.get("legislationNumber") or "")).strip()
+
+    # Check if this is a procedural vote with a known mapping
+    if not t or not n:
+        mapping_key = (congress, session, roll)
+        if mapping_key in PROCEDURAL_VOTE_MAPPINGS:
+            t, n = PROCEDURAL_VOTE_MAPPINGS[mapping_key]
+            print(f"[procedural mapping] roll #{roll}: mapped to {t} {n}")
 
     started = rb.get("startDate")
     started_ts = None

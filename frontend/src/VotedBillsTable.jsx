@@ -126,9 +126,14 @@ export default function VotedBillsTable({
     for (const v of filtered) {
       const type = (v.legislationType || "").trim();
       const num = String(v.legislationNumber || "").trim();
-      const key = type && num ? `${type}::${num}` : `title::${(v.title || "").trim()}`;
+      const title = (v.title || "").trim();
+      // Group by title first (more reliable), fall back to type::num
+      const key = title ? `title::${title}` : (type && num ? `${type}::${num}` : `unknown`);
+      
       if (!map.has(key)) {
-        map.set(key, { key, billType: type || null, billNumber: num || null, title: (v.title || "").trim(), votes: [] });
+        // Use title if available, otherwise use "TYPE NUMBER" format
+        const displayTitle = title || (type && num ? `${type.toUpperCase()} ${num}` : "");
+        map.set(key, { key, billType: type || null, billNumber: num || null, title: displayTitle, votes: [] });
       }
       map.get(key).votes.push(v);
     }
@@ -256,7 +261,10 @@ export default function VotedBillsTable({
                       onClick={() => onSelectBill?.({
                         congress,
                         billType: g.billType.toLowerCase(),
-                        billNumber: g.billNumber
+                        billNumber: g.billNumber,
+                        title: g.title,
+                        legislationType: g.billType,
+                        legislationNumber: g.billNumber
                       })}
                       className="border-0 bg-transparent p-0 cursor-pointer text-blue-600 underline text-sm font-semibold text-left"
                     >
@@ -300,6 +308,7 @@ export default function VotedBillsTable({
                   <button
                     onClick={() => {
                       const v = g.latest; if (!v) return;
+                      console.log("Opening latest roll for bill:", { g, v });
                       onSelectVote?.({
                         congress, session, roll: v.roll,
                         title: v.title,

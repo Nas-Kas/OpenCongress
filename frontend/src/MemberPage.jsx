@@ -249,11 +249,13 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
       const num = String(v.legislationNumber || "").trim();
       const key = type && num ? `${type}::${num}` : `title::${(v.title || "").trim()}`;
       if (!map.has(key)) {
+        // Use title if available, otherwise use "TYPE NUMBER" format
+        const displayTitle = (v.title || "").trim() || (type && num ? `${type.toUpperCase()} ${num}` : "");
         map.set(key, {
           key,
           billType: type || null,
           billNumber: num || null,
-          title: (v.title || "").trim(),
+          title: displayTitle,
           votes: [],
         });
       }
