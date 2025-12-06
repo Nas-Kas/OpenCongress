@@ -8,7 +8,7 @@ import BillPage from "./BillPage";
 import BillsWithoutVotes from "./BillsWithoutVotes";
 import { LoadingSpinner, ErrorMessage } from "./components";
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 
 const getQS = () => new URLSearchParams(window.location.search);
