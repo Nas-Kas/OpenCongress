@@ -130,11 +130,8 @@ export default function BillsWithoutVotes() {
         <div className="flex items-center gap-2">
           <EducationalTooltip
             title="🎯 Early-Stage Betting"
-            content="These bills haven't been voted on yet, making them perfect for betting on committee outcomes, sponsor counts, or whether they'll even get a vote!"
+            content="These bills haven't been voted on yet"
           >
-            <div className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md text-xs font-semibold cursor-help border-b border-dotted border-blue-700">
-              💡 Betting Opportunities
-            </div>
           </EducationalTooltip>
         </div>
       </div>
