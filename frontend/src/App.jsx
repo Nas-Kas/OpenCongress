@@ -40,9 +40,8 @@ export default function App() {
 
   const activeTab = useMemo(() => {
     if (showBillsWithoutVotes) return "bills";
-    if (selectedMember) return "member";
     return "rolls";
-  }, [selectedMember, showBillsWithoutVotes]);
+  }, [showBillsWithoutVotes]);
 
   useEffect(() => {
     const qs = getQS();
@@ -133,9 +132,6 @@ export default function App() {
             if (tab === "rolls") {
               setShowBillsWithoutVotes(false);
               setQS({});
-            } else if (tab === "member") {
-              setShowBillsWithoutVotes(false);
-              setSelectedMember("C001130");
             }
           }}
         />
@@ -168,22 +164,6 @@ export default function App() {
   if (selectedMember) {
     return (
       <div className="p-4 max-w-5xl mx-auto">
-        <NavTabs
-          active="member"
-          onChange={(tab) => {
-            if (tab === "rolls") {
-              setSelectedMember(null);
-              const qs = getQS();
-              const c = qs.get("congress"),
-                s = qs.get("session"),
-                r = qs.get("roll");
-              if (!c || !s || !r) setQS({});
-            } else if (tab === "bills") {
-              setSelectedMember(null);
-              setShowBillsWithoutVotes(true);
-            }
-          }}
-        />
         <div className="mb-3">
           <button
             type="button"
@@ -217,9 +197,7 @@ export default function App() {
       <NavTabs
         active={activeTab}
         onChange={(tab) => {
-          if (tab === "member") {
-            setQS({});
-          } else if (tab === "bills") {
+          if (tab === "bills") {
             setShowBillsWithoutVotes(true);
             setSelectedMember(null);
             setSelectedBill(null);
@@ -425,12 +403,6 @@ function NavTabs({ active = "rolls", onChange }) {
         onClick={() => onChange?.("rolls")}
       >
         🗳️ Voted Bills
-      </button>
-      <button
-        className={getTabClasses(active === "member")}
-        onClick={() => onChange?.("member")}
-      >
-        👤 Member
       </button>
       <button
         className={getTabClasses(active === "bills")}
