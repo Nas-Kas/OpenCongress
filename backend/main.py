@@ -448,6 +448,7 @@ async def get_member_house_votes(
               hv.question, hv.result, hv.started,
               hvm.position,
               hv.legislation_url,
+              hv.yea_count, hv.nay_count, hv.present_count, hv.not_voting_count,
               b.title
             FROM house_vote_members hvm
             JOIN house_votes hv
@@ -474,6 +475,12 @@ async def get_member_house_votes(
             "partyAtVote": None,
             "stateAtVote": None,
             "legislationUrl": v["legislation_url"],
+            "counts": {
+                "yea": v["yea_count"] or 0,
+                "nay": v["nay_count"] or 0,
+                "present": v["present_count"] or 0,
+                "notVoting": v["not_voting_count"] or 0,
+            },
         } for v in votes]
 
         stats = {

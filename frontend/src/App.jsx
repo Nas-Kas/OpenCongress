@@ -218,12 +218,15 @@ export default function App() {
         active={activeTab}
         onChange={(tab) => {
           if (tab === "member") {
-            setSelectedMember(null);
-            setQS({ member: null });
+            setQS({});
           } else if (tab === "bills") {
             setShowBillsWithoutVotes(true);
             setSelectedMember(null);
             setSelectedBill(null);
+          } else if (tab === "rolls") {
+            setSelectedMember(null);
+            setShowBillsWithoutVotes(false);
+            setQS({});
           }
         }}
       />
