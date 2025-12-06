@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
-export default function MemberSearch({ onSelect, placeholder = "Search members by name, ID, state, or party…" }) {
+export default function MemberSearch({ onSelect, placeholder = "Search members by name, state (CA), or party (D/R)…" }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState([]);

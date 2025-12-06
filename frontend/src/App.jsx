@@ -281,10 +281,48 @@ export default function App() {
               Search for representatives to view their voting records and positions.
             </p>
           </div>
-          <div className="max-w-2xl">
+          
+          <div className="mb-6">
             <MemberSearch
               onSelect={(id) => id && setSelectedMember(id.toUpperCase())}
             />
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="bg-white border border-gray-300 rounded-lg p-4">
+              <h3 className="text-lg font-bold mb-3">💡 How to Use</h3>
+              <ul className="space-y-2 text-sm text-gray-700">
+                <li>• Search by name, state (e.g., "CA"), or party (D/R) above</li>
+                <li>• Click on a member to see their complete voting history</li>
+                <li>• View how they voted on specific bills and resolutions</li>
+                <li>• Track their positions across different legislative sessions</li>
+              </ul>
+            </div>
+
+            <div className="bg-white border border-gray-300 rounded-lg p-4">
+              <h3 className="text-lg font-bold mb-3">📊 Quick Stats</h3>
+              <div className="space-y-2 text-sm text-gray-700">
+                <div className="flex justify-between">
+                  <span>House Members:</span>
+                  <strong>435</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Current Congress:</span>
+                  <strong>119th (2025-2027)</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Voting Records:</span>
+                  <strong>Available</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="text-sm font-bold text-blue-900 mb-2">💡 Tip</h3>
+            <p className="text-sm text-blue-800">
+              You can also access member pages directly from the Votes tab by clicking on any representative's name in the voting tables.
+            </p>
           </div>
         </div>
       )}
@@ -364,6 +402,11 @@ export default function App() {
 }
 
 function VoteDetailContent({ meta, bill, counts, rows, onViewBill, onViewMember }) {
+  // Construct PDF URL if we have the necessary info
+  const pdfUrl = meta?.congress && meta?.legislationType && meta?.legislationNumber
+    ? `https://www.congress.gov/${meta.congress}/bills/${meta.legislationType.toLowerCase()}${meta.legislationNumber}/BILLS-${meta.congress}${meta.legislationType.toLowerCase()}${meta.legislationNumber}eh.pdf`
+    : null;
+
   return (
     <div>
       {meta && (
@@ -414,8 +457,21 @@ function VoteDetailContent({ meta, bill, counts, rows, onViewBill, onViewMember 
               })}
               className="text-blue-600 underline hover:text-blue-800"
             >
-              View bill
+              View analysis
             </button>
+            {pdfUrl && (
+              <>
+                •
+                <a
+                  href={pdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 underline hover:text-blue-800"
+                >
+                  View PDF
+                </a>
+              </>
+            )}
           </div>
         </div>
       )}
