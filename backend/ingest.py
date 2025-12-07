@@ -33,17 +33,100 @@ def pick_vote_block(payload: dict) -> dict:
     return {}
 
 # Mapping of procedural vote questions to their associated bills
-# This handles cases where Congress.gov API doesn't provide legislationType/legislationNumber
+# This handles edge cases where all parsing methods fail
+# Format: (congress, session, roll): (rule_type, rule_num, subject_type, subject_num)
 PROCEDURAL_VOTE_MAPPINGS = {
-    # Congress 119, Session 1 - H. Con. Res. 58 (Denouncing the horrors of socialism)
-    (119, 1, 305): ("HCONRES", "58"),  # "On Agreeing to the Resolution"
-    (119, 1, 283): ("HCONRES", "58"),  # "On Ordering the Previous Question"
-    (119, 1, 187): ("HCONRES", "58"),  # "On Ordering the Previous Question"
-    (119, 1, 186): ("HCONRES", "58"),  # "On Consideration of the Resolution"
-    (119, 1, 178): ("HCONRES", "58"),  # "On Motion to Adjourn"
-    (119, 1, 169): ("HCONRES", "58"),  # "On Motion to Adjourn"
-    (119, 1, 138): ("HCONRES", "58"),  # "On Motion to Adjourn"
+    # Only add truly ambiguous cases here - most votes are now parsed automatically
+    # Example: (119, 1, 305): ("HCONRES", "58", "HR", "456"),
 }
+
+import re
+
+def parse_bill_from_question(question: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Extract bill type and number from vote question text.
+    Returns (bill_type, bill_number) or (None, None) if not found.
+    
+    Handles patterns like:
+    - "On Passage of H.R. 1949"
+    - "On Agreeing to H. Con. Res. 58"
+    - "On Motion to Recommit S. 2341"
+    """
+    if not question:
+        return None, None
+    
+    # Patterns for different bill types (order matters - most specific first)
+    patterns = [
+        # House/Senate Concurrent Resolutions: H.Con.Res., H. Con. Res., HCONRES, etc.
+        (r'\b(H\.?\s*Con\.?\s*Res\.?|S\.?\s*Con\.?\s*Res\.?)\s+(\d+)\b', 
+         {'HCONRES': 'HCONRES', 'SCONRES': 'SCONRES'}),
+        
+        # House/Senate Joint Resolutions: H.J.Res., H. J. Res., HJRES, etc.
+        (r'\b(H\.?\s*J\.?\s*Res\.?|S\.?\s*J\.?\s*Res\.?)\s+(\d+)\b',
+         {'HJRES': 'HJRES', 'SJRES': 'SJRES'}),
+        
+        # House/Senate Simple Resolutions: H.Res., H. Res., HRES, etc.
+        (r'\b(H\.?\s*Res\.?|S\.?\s*Res\.?)\s+(\d+)\b',
+         {'HRES': 'HRES', 'SRES': 'SRES'}),
+        
+        # House/Senate Bills: H.R., H. R., HR, S., etc.
+        (r'\b(H\.?\s*R\.?|S\.?)\s+(\d+)\b',
+         {'HR': 'HR', 'S': 'S'}),
+    ]
+    
+    for pattern, type_map in patterns:
+        match = re.search(pattern, question, re.IGNORECASE)
+        if match:
+            bill_type_raw = match.group(1)
+            bill_number = match.group(2)
+            
+            # Normalize bill type (remove dots, spaces, make uppercase)
+            bill_type_normalized = re.sub(r'[.\s]', '', bill_type_raw).upper()
+            
+            # Map to standard format
+            bill_type = type_map.get(bill_type_normalized, bill_type_normalized)
+            
+            return bill_type, bill_number
+    
+    return None, None
+
+
+async def parse_subject_bill_from_hres(
+    client: httpx.AsyncClient, 
+    congress: int, 
+    hres_number: str
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Parse the subject bill from an HRES title.
+    
+    HRES titles often follow patterns like:
+    - "Providing for consideration of H.R. 456"
+    - "Waiving points of order against the bill H.R. 789"
+    
+    Returns (subject_bill_type, subject_bill_number) or (None, None)
+    """
+    try:
+        # Fetch HRES details from API
+        url = f"{BASE_URL}/bill/{congress}/hres/{hres_number}"
+        params = {"api_key": API_KEY}
+        
+        resp = await client.get(url, params=params, timeout=10.0)
+        if resp.status_code != 200:
+            return None, None
+        
+        data = resp.json()
+        bill_data = data.get("bill", {})
+        title = bill_data.get("title", "")
+        
+        if not title:
+            return None, None
+        
+        # Parse bill reference from title
+        return parse_bill_from_question(title)
+        
+    except Exception as e:
+        print(f"[warning] Failed to fetch HRES {hres_number} for subject bill parsing: {e}")
+        return None, None
 
 def to_date(v) -> Optional[date]:
     """Parse 'YYYY-MM-DD' or ISO datetime strings into a date, else None."""
@@ -86,16 +169,19 @@ async def get_json(client: httpx.AsyncClient, url: str, params: dict | None = No
 HOUSE_VOTES_UPSERT = """
 INSERT INTO house_votes AS hv
   (congress, session, roll, chamber, question, result, started,
-   legislation_type, legislation_number, source, legislation_url,
+   legislation_type, legislation_number, subject_bill_type, subject_bill_number,
+   source, legislation_url,
    yea_count, nay_count, present_count, not_voting_count)
 VALUES
-  ($1,$2,$3,'House',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+  ($1,$2,$3,'House',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 ON CONFLICT (congress, session, roll) DO UPDATE SET
   question            = COALESCE(EXCLUDED.question, hv.question),
   result              = COALESCE(EXCLUDED.result, hv.result),
   started             = COALESCE(EXCLUDED.started, hv.started),
   legislation_type    = COALESCE(EXCLUDED.legislation_type, hv.legislation_type),
   legislation_number  = COALESCE(EXCLUDED.legislation_number, hv.legislation_number),
+  subject_bill_type   = COALESCE(EXCLUDED.subject_bill_type, hv.subject_bill_type),
+  subject_bill_number = COALESCE(EXCLUDED.subject_bill_number, hv.subject_bill_number),
   source              = COALESCE(EXCLUDED.source, hv.source),
   legislation_url     = COALESCE(EXCLUDED.legislation_url, hv.legislation_url),
   yea_count           = COALESCE(EXCLUDED.yea_count, hv.yea_count),
@@ -377,13 +463,34 @@ async def ingest_roll(pool: asyncpg.Pool, client: httpx.AsyncClient, congress: i
     legislation_url = rb.get("legislationUrl") or None
     t = (rb.get("legislationType") or "").strip()
     n = (str(rb.get("legislationNumber") or "")).strip()
+    
+    # Initialize subject bill fields
+    subject_t = None
+    subject_n = None
 
-    # Check if this is a procedural vote with a known mapping
+    # Step 1: Try parsing from question text if API didn't provide bill info
+    if not t or not n:
+        t_parsed, n_parsed = parse_bill_from_question(question or "")
+        if t_parsed and n_parsed:
+            t, n = t_parsed, n_parsed
+            print(f"[parsed from question] roll #{roll}: {t} {n}")
+
+    # Step 2: Check hardcoded mappings for truly ambiguous cases
     if not t or not n:
         mapping_key = (congress, session, roll)
         if mapping_key in PROCEDURAL_VOTE_MAPPINGS:
-            t, n = PROCEDURAL_VOTE_MAPPINGS[mapping_key]
-            print(f"[procedural mapping] roll #{roll}: mapped to {t} {n}")
+            mapping = PROCEDURAL_VOTE_MAPPINGS[mapping_key]
+            if len(mapping) == 4:
+                t, n, subject_t, subject_n = mapping
+            else:
+                t, n = mapping
+            print(f"[hardcoded mapping] roll #{roll}: {t} {n}")
+
+    # Step 3: If this is an HRES, try to extract the subject bill
+    if t and t.upper() == "HRES" and n and not subject_t:
+        subject_t, subject_n = await parse_subject_bill_from_hres(client, congress, n)
+        if subject_t and subject_n:
+            print(f"[parsed HRES subject] roll #{roll}: HRES {n} is about {subject_t} {subject_n}")
 
     started = rb.get("startDate")
     started_ts = None
@@ -401,6 +508,7 @@ async def ingest_roll(pool: asyncpg.Pool, client: httpx.AsyncClient, congress: i
                 congress, session, roll,
                 question, rb.get("result"), started_ts,
                 t or rb.get("legislationType"), n or rb.get("legislationNumber"),
+                subject_t, subject_n,
                 rb.get("sourceDataURL"), legislation_url,
                 None, None, None, None
             )
@@ -460,6 +568,7 @@ async def ingest_roll(pool: asyncpg.Pool, client: httpx.AsyncClient, congress: i
                 congress, session, roll,
                 question, rb.get("result"), started_ts,
                 t or rb.get("legislationType"), n or rb.get("legislationNumber"),
+                subject_t, subject_n,
                 rb.get("sourceDataURL"), legislation_url,
                 yea, nay, present, nv
             )

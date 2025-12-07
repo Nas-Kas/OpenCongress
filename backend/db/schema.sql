@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS house_votes (
   started             TIMESTAMPTZ,
   legislation_type    TEXT,
   legislation_number  TEXT,
+  subject_bill_type   TEXT,  -- The actual bill when legislation_type is a procedural rule (HRES)
+  subject_bill_number TEXT,  -- The actual bill number when legislation_type is a procedural rule
   source              TEXT,
   legislation_url     TEXT,
   -- cached counts for fast UI
@@ -37,6 +39,7 @@ CREATE TABLE IF NOT EXISTS house_votes (
 CREATE INDEX IF NOT EXISTS house_votes_started_idx    ON house_votes (started DESC);
 CREATE INDEX IF NOT EXISTS house_votes_bill_idx       ON house_votes (legislation_type, legislation_number);
 CREATE INDEX IF NOT EXISTS house_votes_bill_ch_idx    ON house_votes (chamber, legislation_type, legislation_number, started DESC);
+CREATE INDEX IF NOT EXISTS house_votes_subject_bill_idx ON house_votes (subject_bill_type, subject_bill_number);
 
 CREATE TABLE IF NOT EXISTS house_vote_members (
   congress    INT  NOT NULL,
@@ -127,70 +130,6 @@ CREATE INDEX IF NOT EXISTS bill_chunks_embedding_idx ON bill_chunks
 
 -- Index for filtering by bill
 CREATE INDEX IF NOT EXISTS bill_chunks_bill_idx ON bill_chunks (congress, bill_type, bill_number);
-
--- === Betting System Tables ===
-
-CREATE TABLE IF NOT EXISTS users (
-  user_id     SERIAL PRIMARY KEY,
-  username    TEXT UNIQUE NOT NULL,
-  email       TEXT UNIQUE,
-  balance     DECIMAL(10,2) DEFAULT 1000.00, -- Starting balance
-  created_at  TIMESTAMPTZ DEFAULT now(),
-  updated_at  TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS betting_markets (
-  market_id       SERIAL PRIMARY KEY,
-  congress        INT NOT NULL,
-  bill_type       TEXT NOT NULL,
-  bill_number     TEXT NOT NULL,
-  title           TEXT,
-  description     TEXT,
-  market_type     TEXT NOT NULL DEFAULT 'bill_passage', -- 'bill_passage', 'member_vote', 'vote_count', 'timeline'
-  status          TEXT NOT NULL DEFAULT 'active', -- 'active', 'resolved', 'cancelled'
-  resolution      TEXT, -- 'pass', 'fail', 'withdrawn', etc.
-  deadline        TIMESTAMPTZ, -- When betting closes
-  resolved_at     TIMESTAMPTZ,
-  created_at      TIMESTAMPTZ DEFAULT now(),
-  updated_at      TIMESTAMPTZ DEFAULT now(),
-  -- Additional fields for different market types
-  target_member   TEXT, -- bioguide_id for member_vote markets
-  target_count    INT,  -- target vote count for vote_count markets
-  target_date     DATE, -- target date for timeline markets
-  FOREIGN KEY (congress, bill_type, bill_number) 
-    REFERENCES bills (congress, bill_type, bill_number)
-);
-
-CREATE INDEX IF NOT EXISTS betting_markets_bill_idx ON betting_markets (congress, bill_type, bill_number);
-CREATE INDEX IF NOT EXISTS betting_markets_status_idx ON betting_markets (status);
-
-CREATE TABLE IF NOT EXISTS bets (
-  bet_id      SERIAL PRIMARY KEY,
-  market_id   INT NOT NULL,
-  user_id     INT NOT NULL,
-  position    TEXT NOT NULL, -- 'yes', 'no', 'pass', 'fail', 'over', 'under', etc.
-  amount      DECIMAL(10,2) NOT NULL CHECK (amount > 0),
-  odds        DECIMAL(5,2), -- Odds at time of bet (e.g., 1.50 for 3:2)
-  potential_payout DECIMAL(10,2), -- amount * odds
-  status      TEXT NOT NULL DEFAULT 'active', -- 'active', 'won', 'lost', 'refunded'
-  placed_at   TIMESTAMPTZ DEFAULT now(),
-  resolved_at TIMESTAMPTZ,
-  FOREIGN KEY (market_id) REFERENCES betting_markets (market_id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS bets_market_idx ON bets (market_id);
-CREATE INDEX IF NOT EXISTS bets_user_idx ON bets (user_id);
-CREATE INDEX IF NOT EXISTS bets_status_idx ON bets (status);
-
-CREATE TABLE IF NOT EXISTS market_odds (
-  market_id   INT NOT NULL,
-  position    TEXT NOT NULL, -- 'yes', 'no', 'pass', 'fail', 'over', 'under'
-  odds        DECIMAL(5,2) NOT NULL,
-  updated_at  TIMESTAMPTZ DEFAULT now(),
-  PRIMARY KEY (market_id, position),
-  FOREIGN KEY (market_id) REFERENCES betting_markets (market_id) ON DELETE CASCADE
-);
 
 -- Table for speculative/future bills that don't exist in the main bills table yet
 CREATE TABLE IF NOT EXISTS speculative_bills (
