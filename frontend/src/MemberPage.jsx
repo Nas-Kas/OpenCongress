@@ -164,10 +164,16 @@ const miniTag = {
   background: "#F3F4F6", color: "#374151", border: `1px solid ${TOKENS.border}`
 };
 const miniMuted = { fontSize: 12, color: TOKENS.textMuted };
-const chevBtn = {
-  height: 28, width: 28, borderRadius: 8,
-  border: `1px solid ${TOKENS.border}`, background: "#fff", cursor: "pointer"
-};
+const chevBtn = (isOpen) => ({
+  height: 32, width: 32, borderRadius: 8,
+  border: isOpen ? "2px solid #3B82F6" : "2px solid #9CA3AF",
+  background: isOpen ? "#EFF6FF" : "#fff",
+  color: isOpen ? "#2563EB" : "#4B5563",
+  cursor: "pointer",
+  fontSize: 18,
+  fontWeight: 700,
+  transition: "all 0.2s"
+});
 const rowBtn = {
   border: `1px solid ${TOKENS.btn.secondaryBorder}`,
   background: "#fff",
@@ -404,7 +410,13 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
                     setOpen(n);
                   }}
                   title={isOpen ? "Hide roll calls" : "Show roll calls"}
-                  style={chevBtn}
+                  style={chevBtn(isOpen)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = isOpen ? "#DBEAFE" : "#F9FAFB";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = isOpen ? "#EFF6FF" : "#fff";
+                  }}
                 >
                   {isOpen ? "▾" : "▸"}
                 </button>

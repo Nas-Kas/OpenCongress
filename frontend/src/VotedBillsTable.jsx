@@ -252,7 +252,11 @@ export default function VotedBillsTable({
                     setOpen(n);
                   }}
                   title={isOpen ? "Hide roll calls" : "Show roll calls"}
-                  className="h-7 w-7 rounded-lg border border-gray-300 bg-white cursor-pointer"
+                  className={`h-8 w-8 rounded-lg border-2 cursor-pointer font-bold text-lg transition-colors ${
+                    isOpen 
+                      ? "border-blue-500 bg-blue-50 text-blue-600 hover:bg-blue-100" 
+                      : "border-gray-400 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-500"
+                  }`}
                 >
                   {isOpen ? "▾" : "▸"}
                 </button>
