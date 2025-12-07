@@ -110,6 +110,7 @@ async def list_house_votes(
                 SELECT hv.congress, hv.session, hv.roll,
                        hv.question, hv.result, hv.started,
                        hv.legislation_type, hv.legislation_number,
+                       hv.subject_bill_type, hv.subject_bill_number,
                        hv.source, hv.legislation_url,
                        hv.yea_count, hv.nay_count, hv.present_count, hv.not_voting_count,
                        CASE WHEN $1 THEN b.title ELSE NULL END AS title
@@ -130,6 +131,7 @@ async def list_house_votes(
                 SELECT hv.congress, hv.session, hv.roll,
                        hv.question, hv.result, hv.started,
                        hv.legislation_type, hv.legislation_number,
+                       hv.subject_bill_type, hv.subject_bill_number,
                        hv.source, hv.legislation_url,
                        hv.yea_count, hv.nay_count, hv.present_count, hv.not_voting_count,
                        CASE WHEN $1 THEN b.title ELSE NULL END AS title
@@ -154,6 +156,8 @@ async def list_house_votes(
         "started": _iso(r["started"]),
         "legislationType": r["legislation_type"],
         "legislationNumber": r["legislation_number"],
+        "subjectBillType": r["subject_bill_type"],
+        "subjectBillNumber": r["subject_bill_number"],
         "source": r["legislation_url"] or r["source"],
         "title": r["title"] if include_titles else None,
         "yeaCount": r["yea_count"],
@@ -445,6 +449,7 @@ async def get_member_house_votes(
             SELECT
               hvm.roll,
               hv.legislation_type, hv.legislation_number,
+              hv.subject_bill_type, hv.subject_bill_number,
               hv.question, hv.result, hv.started,
               hvm.position,
               hv.legislation_url,
@@ -467,6 +472,8 @@ async def get_member_house_votes(
             "roll": v["roll"],
             "legislationType": v["legislation_type"],
             "legislationNumber": v["legislation_number"],
+            "subjectBillType": v["subject_bill_type"],
+            "subjectBillNumber": v["subject_bill_number"],
             "title": v["title"],
             "question": v["question"],
             "result": v["result"],

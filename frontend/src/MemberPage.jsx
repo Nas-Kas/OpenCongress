@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import BillLabel from "./components/BillLabel";
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
@@ -253,8 +254,19 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
   const groups = useMemo(() => {
     const map = new Map();
     for (const v of filtered) {
-      const type = (v.legislationType || "").trim();
-      const num = String(v.legislationNumber || "").trim();
+      let type = (v.legislationType || "").trim();
+      let num = String(v.legislationNumber || "").trim();
+      
+      // If this is a procedural vote (HRES) with a subject bill, group by the subject bill instead
+      const isProceduralRule = type.toUpperCase() === 'HRES';
+      const hasSubject = v.subjectBillType && v.subjectBillNumber;
+      
+      if (isProceduralRule && hasSubject) {
+        // Group procedural votes under their subject bill
+        type = v.subjectBillType;
+        num = v.subjectBillNumber;
+      }
+      
       const key = type && num ? `${type}::${num}` : `title::${(v.title || "").trim()}`;
       if (!map.has(key)) {
         // Use title if available, otherwise use "TYPE NUMBER" format
@@ -441,7 +453,14 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
                   )}
                   <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
                     {g.billType && g.billNumber && (
-                      <span style={miniTag}>{g.billType} {g.billNumber}</span>
+                      <span style={miniTag}>
+                        <BillLabel 
+                          legislationType={g.billType}
+                          legislationNumber={g.billNumber}
+                          subjectBillType={g.latest?.subjectBillType}
+                          subjectBillNumber={g.latest?.subjectBillNumber}
+                        />
+                      </span>
                     )}
                     {g.latest?.started && (
                       <span style={miniMuted}>{String(g.latest.started).slice(0,10)}</span>

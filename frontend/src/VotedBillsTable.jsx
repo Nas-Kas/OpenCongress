@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ResultBadge, VoteButton } from "./components";
+import BillLabel from "./components/BillLabel";
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
@@ -126,9 +127,20 @@ export default function VotedBillsTable({
   const allGroups = useMemo(() => {
     const map = new Map();
     for (const v of filtered) {
-      const type = (v.legislationType || "").trim();
-      const num = String(v.legislationNumber || "").trim();
+      let type = (v.legislationType || "").trim();
+      let num = String(v.legislationNumber || "").trim();
       const title = (v.title || "").trim();
+      
+      // If this is a procedural vote (HRES) with a subject bill, group by the subject bill instead
+      const isProceduralRule = type.toUpperCase() === 'HRES';
+      const hasSubject = v.subjectBillType && v.subjectBillNumber;
+      
+      if (isProceduralRule && hasSubject) {
+        // Group procedural votes under their subject bill
+        type = v.subjectBillType;
+        num = v.subjectBillNumber;
+      }
+      
       // Group by title first (more reliable), fall back to type::num
       const key = title ? `title::${title}` : (type && num ? `${type}::${num}` : `unknown`);
       
@@ -281,7 +293,14 @@ export default function VotedBillsTable({
                   )}
                   <div className="flex gap-2 mt-1.5 items-center flex-wrap">
                     {g.billType && g.billNumber && (
-                      <span className="rounded-md px-1.5 py-0.5 text-xs bg-gray-100 text-gray-700 border border-gray-300">{g.billType} {g.billNumber}</span>
+                      <span className="rounded-md px-1.5 py-0.5 text-xs bg-gray-100 text-gray-700 border border-gray-300">
+                        <BillLabel 
+                          legislationType={g.billType}
+                          legislationNumber={g.billNumber}
+                          subjectBillType={g.latest?.subjectBillType}
+                          subjectBillNumber={g.latest?.subjectBillNumber}
+                        />
+                      </span>
                     )}
                     {g.latest?.started && (
                       <span className="text-xs text-gray-500">{String(g.latest.started).slice(0, 10)}</span>
@@ -344,9 +363,15 @@ export default function VotedBillsTable({
                       <tbody>
                         {g.votes.map((v, idx) => {
                           const c = getCounts(v);
+                          const isProceduralVote = v.legislationType?.toUpperCase() === 'HRES' && v.subjectBillType;
                           return (
                             <tr key={v.roll} className={`border-t border-gray-100 ${idx % 2 === 1 ? "bg-blue-50" : ""}`}>
-                              <td className="px-3 py-2.5 text-gray-900 text-sm">#{v.roll}</td>
+                              <td className="px-3 py-2.5 text-gray-900 text-sm">
+                                #{v.roll}
+                                {isProceduralVote && (
+                                  <span className="ml-1 text-xs text-gray-500" title="Procedural vote">⚙️</span>
+                                )}
+                              </td>
                               <td className="px-3 py-2.5 text-gray-900 text-sm min-w-[280px]">{v.question || "—"}</td>
                               <td className="px-3 py-2.5 text-gray-900 text-sm"><ResultBadge result={v.result} /></td>
                               <td className="px-3 py-2.5 text-gray-900 text-sm"><Counts c={c} /></td>
