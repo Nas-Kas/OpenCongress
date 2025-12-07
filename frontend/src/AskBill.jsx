@@ -124,7 +124,7 @@ export default function AskBill({ congress, billType, billNumber }) {
 
   if (isEmbedded === false) {
     return (
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-4">
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
         <h3 className="font-semibold text-yellow-800 mb-2">⚠️ Bill Not Embedded Yet</h3>
         <p className="text-sm text-yellow-700 mb-3">
           This bill hasn't been processed for Q&A yet. Click the button below to embed it (this may take a few minutes for large bills).
@@ -148,7 +148,7 @@ export default function AskBill({ congress, billType, billNumber }) {
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6 mt-6">
+    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
       <h3 className="text-xl font-bold mb-2">💬 Ask This Bill a Question</h3>
       <p className="text-sm text-gray-600 mb-4">
         Use AI to get answers about this bill's content, provisions, and impact.

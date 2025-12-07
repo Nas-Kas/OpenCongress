@@ -159,9 +159,134 @@ export default function BillPage({ billData: initialBillData, congress, billType
           </h1>
 
           {billData?.introducedDate && (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 mb-3">
               Introduced: {new Date(billData.introducedDate).toLocaleDateString()}
             </p>
+          )}
+
+          {/* Quick Links */}
+          <div className="flex gap-2 flex-wrap items-center">
+            {billData?.publicUrl && (
+              <a
+                href={billData.publicUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-gray-700 font-medium"
+              >
+                📄 Congress.gov
+              </a>
+            )}
+            {congress && billType && billNumber && (
+              <a
+                href={`https://www.congress.gov/${congress}/bills/${billType.toLowerCase()}${billNumber}/BILLS-${congress}${billType.toLowerCase()}${billNumber}eh.pdf`}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-gray-700 font-medium"
+              >
+                📑 View PDF
+              </a>
+            )}
+            {billData?.textVersions && billData.textVersions.length > 0 && billData.textVersions[0].formats && (
+              <>
+                {billData.textVersions[0].formats.find(f => f.type === 'Formatted Text') && (
+                  <a
+                    href={billData.textVersions[0].formats.find(f => f.type === 'Formatted Text').url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-gray-700 font-medium"
+                  >
+                    📋 Full Text
+                  </a>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Bill Details */}
+      <div className="bg-white border border-gray-300 rounded-lg shadow-sm mb-6">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">📋 Bill Details</h2>
+        </div>
+
+        <div className="px-6 py-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-1">Bill Type</h3>
+              <p className="text-gray-700 mb-4">
+                {billType.toUpperCase()} - {
+                  billType.toLowerCase() === 'hres' ? 'House Resolution' :
+                    billType.toLowerCase() === 'hr' ? 'House Bill' :
+                      billType.toLowerCase() === 'sres' ? 'Senate Resolution' :
+                        billType.toLowerCase() === 's' ? 'Senate Bill' :
+                          billType.toLowerCase() === 'hjres' ? 'House Joint Resolution' :
+                            billType.toLowerCase() === 'sjres' ? 'Senate Joint Resolution' :
+                              'Congressional Legislation'
+                }
+              </p>
+
+              <h3 className="font-semibold text-gray-900 mb-1">Congress</h3>
+              <p className="text-gray-700 mb-4">{congress}th Congress (2025-2026)</p>
+
+              {billData?.votes && billData.votes.length > 0 && (
+                <>
+                  <h3 className="font-semibold text-gray-900 mb-1">Vote History</h3>
+                  <p className="text-gray-700">{billData.votes.length} roll call vote{billData.votes.length !== 1 ? 's' : ''}</p>
+                </>
+              )}
+            </div>
+
+            <div>
+              {billData?.sponsor && (
+                <>
+                  <h3 className="font-semibold text-gray-900 mb-1">Sponsor</h3>
+                  <p className="text-gray-700 mb-4">{billData.sponsor}</p>
+                </>
+              )}
+
+              {billData?.committees && billData.committees.length > 0 && (
+                <>
+                  <h3 className="font-semibold text-gray-900 mb-1">Committees</h3>
+                  <ul className="text-gray-700 mb-4">
+                    {billData.committees.map((committee, index) => (
+                      <li key={index}>{committee}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {billData?.introducedDate && (
+                <>
+                  <h3 className="font-semibold text-gray-900 mb-1">Introduced</h3>
+                  <p className="text-gray-700 mb-4">
+                    {new Date(billData.introducedDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </>
+              )}
+            </div>
+
+            {billData?.latestAction && (
+              <div className="md:col-span-2">
+                <h3 className="font-semibold text-gray-900 mb-1">Latest Action</h3>
+                <p className="text-gray-700">
+                  {typeof billData.latestAction === 'object' 
+                    ? billData.latestAction.text 
+                    : billData.latestAction}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {(!billData?.sponsor && !billData?.committees && !billData?.latestAction && !billData?.introducedDate) && (
+            <div className="text-center py-4 text-gray-500">
+              <p>Additional bill details are not available in our database.</p>
+              <p className="text-sm mt-1">You can view voting history and generate an AI summary below.</p>
+            </div>
           )}
         </div>
       </div>
@@ -288,92 +413,12 @@ export default function BillPage({ billData: initialBillData, congress, billType
         </div>
       </div>
 
-      {/* Bill Details */}
-      <div className="bg-white border border-gray-300 rounded-lg shadow-sm mb-6">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">📋 Bill Details</h2>
-        </div>
-
-        <div className="px-6 py-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h3 className="font-semibold text-gray-900 mb-1">Bill Type</h3>
-              <p className="text-gray-700 mb-4">
-                {billType.toUpperCase()} - {
-                  billType.toLowerCase() === 'hres' ? 'House Resolution' :
-                    billType.toLowerCase() === 'hr' ? 'House Bill' :
-                      billType.toLowerCase() === 'sres' ? 'Senate Resolution' :
-                        billType.toLowerCase() === 's' ? 'Senate Bill' :
-                          billType.toLowerCase() === 'hjres' ? 'House Joint Resolution' :
-                            billType.toLowerCase() === 'sjres' ? 'Senate Joint Resolution' :
-                              'Congressional Legislation'
-                }
-              </p>
-
-              <h3 className="font-semibold text-gray-900 mb-1">Congress</h3>
-              <p className="text-gray-700 mb-4">{congress}th Congress (2025-2026)</p>
-
-              {billData?.votes && billData.votes.length > 0 && (
-                <>
-                  <h3 className="font-semibold text-gray-900 mb-1">Vote History</h3>
-                  <p className="text-gray-700">{billData.votes.length} roll call vote{billData.votes.length !== 1 ? 's' : ''}</p>
-                </>
-              )}
-            </div>
-
-            <div>
-              {billData?.sponsor && (
-                <>
-                  <h3 className="font-semibold text-gray-900 mb-1">Sponsor</h3>
-                  <p className="text-gray-700 mb-4">{billData.sponsor}</p>
-                </>
-              )}
-
-              {billData?.committees && billData.committees.length > 0 && (
-                <>
-                  <h3 className="font-semibold text-gray-900 mb-1">Committees</h3>
-                  <ul className="text-gray-700 mb-4">
-                    {billData.committees.map((committee, index) => (
-                      <li key={index}>{committee}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-
-              {billData?.introducedDate && (
-                <>
-                  <h3 className="font-semibold text-gray-900 mb-1">Introduced</h3>
-                  <p className="text-gray-700 mb-4">
-                    {new Date(billData.introducedDate).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
-                  </p>
-                </>
-              )}
-            </div>
-
-            {billData?.latestAction && (
-              <div className="md:col-span-2">
-                <h3 className="font-semibold text-gray-900 mb-1">Latest Action</h3>
-                <p className="text-gray-700">
-                  {typeof billData.latestAction === 'object' 
-                    ? billData.latestAction.text 
-                    : billData.latestAction}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {(!billData?.sponsor && !billData?.committees && !billData?.latestAction && !billData?.introducedDate) && (
-            <div className="text-center py-4 text-gray-500">
-              <p>Additional bill details are not available in our database.</p>
-              <p className="text-sm mt-1">You can view voting history and generate an AI summary above.</p>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Ask Bill RAG Component */}
+      <AskBill 
+        congress={congress} 
+        billType={billType} 
+        billNumber={billNumber} 
+      />
 
       {/* Roll Call Votes */}
       {!billData ? (
@@ -450,12 +495,6 @@ export default function BillPage({ billData: initialBillData, congress, billType
         </div>
       )}
 
-      {/* Ask Bill RAG Component */}
-      <AskBill 
-        congress={congress} 
-        billType={billType} 
-        billNumber={billNumber} 
-      />
     </div>
   );
 }
