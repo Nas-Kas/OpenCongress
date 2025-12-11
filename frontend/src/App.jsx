@@ -402,9 +402,9 @@ export default function App() {
 }
 
 function VoteDetailContent({ meta, bill, counts, rows, onViewBill, onViewMember }) {
-  // Construct PDF URL if we have the necessary info
-  const pdfUrl = meta?.congress && meta?.legislationType && meta?.legislationNumber
-    ? `https://www.congress.gov/${meta.congress}/bills/${meta.legislationType.toLowerCase()}${meta.legislationNumber}/BILLS-${meta.congress}${meta.legislationType.toLowerCase()}${meta.legislationNumber}eh.pdf`
+  // Use the actual PDF URL from bill text versions if available
+  const pdfUrl = bill?.textVersions && bill.textVersions.length > 0 && bill.textVersions[0].url
+    ? bill.textVersions[0].url
     : null;
 
   return (

@@ -3,7 +3,7 @@ import { LoadingSpinner, ErrorMessage, BillCard } from "./components";
 import EducationalTooltip from "./EducationalTooltip";
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
-export default function BillsWithoutVotes() {
+export default function BillsWithoutVotes({ onSelectBill }) {
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -36,7 +36,7 @@ export default function BillsWithoutVotes() {
       setBills(data.bills);
       setPagination({
         total: data.total,
-        limit: data.limit,
+        limit: pagination.limit, // Keep the current limit
         offset: data.offset,
         hasMore: data.hasMore
       });
@@ -62,14 +62,13 @@ export default function BillsWithoutVotes() {
   };
 
   const navigateToBill = (bill) => {
-    const url = new URL(window.location);
-    url.searchParams.set('congress', bill.congress);
-    url.searchParams.set('billType', bill.billType);
-    url.searchParams.set('billNumber', bill.billNumber);
-    // Remove bills page params to switch to bill view
-    url.searchParams.delete('bills');
-    url.searchParams.delete('page');
-    window.location.href = url.toString();
+    if (onSelectBill) {
+      onSelectBill({
+        congress: bill.congress,
+        billType: bill.billType,
+        billNumber: bill.billNumber
+      });
+    }
   };
 
   if (loading && bills.length === 0) {

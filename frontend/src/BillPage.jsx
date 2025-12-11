@@ -176,9 +176,9 @@ export default function BillPage({ billData: initialBillData, congress, billType
                 📄 Congress.gov
               </a>
             )}
-            {congress && billType && billNumber && (
+            {billData?.textVersions && billData.textVersions.length > 0 && billData.textVersions[0].url && (
               <a
-                href={`https://www.congress.gov/${congress}/bills/${billType.toLowerCase()}${billNumber}/BILLS-${congress}${billType.toLowerCase()}${billNumber}eh.pdf`}
+                href={billData.textVersions[0].url}
                 target="_blank"
                 rel="noreferrer"
                 className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-gray-700 font-medium"

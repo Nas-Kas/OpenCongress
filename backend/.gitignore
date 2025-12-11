@@ -1,7 +1,44 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/__pycache__
-/.venv
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables
 .env
-requirements.txt
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+bill.pdf
+*.pdf
+
+# Backup files
+*_backup.py
+main_backup.py
+
+# Database
+*.db
+*.sqlite
+
+# Logs
+*.log
