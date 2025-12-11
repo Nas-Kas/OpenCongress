@@ -130,18 +130,3 @@ CREATE INDEX IF NOT EXISTS bill_chunks_embedding_idx ON bill_chunks
 
 -- Index for filtering by bill
 CREATE INDEX IF NOT EXISTS bill_chunks_bill_idx ON bill_chunks (congress, bill_type, bill_number);
-
--- Table for speculative/future bills that don't exist in the main bills table yet
-CREATE TABLE IF NOT EXISTS speculative_bills (
-  spec_bill_id    SERIAL PRIMARY KEY,
-  congress        INT NOT NULL,
-  bill_type       TEXT NOT NULL,
-  bill_number     TEXT NOT NULL,
-  title           TEXT,
-  description     TEXT,
-  expected_intro_date DATE,
-  created_by      INT, -- user who created this speculative bill
-  created_at      TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(congress, bill_type, bill_number),
-  FOREIGN KEY (created_by) REFERENCES users (user_id)
-);

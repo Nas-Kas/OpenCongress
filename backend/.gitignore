@@ -20,6 +20,7 @@ env/
 # IDE
 .vscode/
 .idea/
+.kiro/
 *.swp
 *.swo
 *~
@@ -31,6 +32,7 @@ Thumbs.db
 # Project specific
 bill.pdf
 *.pdf
+script_archive/
 
 # Backup files
 *_backup.py
