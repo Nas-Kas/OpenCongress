@@ -213,7 +213,7 @@ export default function App() {
   // --- Member detail view ---
   if (selectedMember) {
     return (
-      <div className="p-4 max-w-5xl mx-auto">
+      <div className="p-2 sm:p-4 max-w-5xl mx-auto">
         <NavTabs active="members" onChange={setActiveTab} />
         <div className="mt-3 mb-3">
           <button
@@ -222,7 +222,7 @@ export default function App() {
               setSelectedMember(null);
               setActiveTab("members");
             }}
-            className="px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 cursor-pointer"
+            className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 cursor-pointer text-sm sm:text-base"
           >
             ← Back to Members
           </button>
@@ -234,14 +234,14 @@ export default function App() {
 
   // --- Main tabbed view ---
   return (
-    <div className="p-4 max-w-6xl mx-auto">
+    <div className="p-2 sm:p-4 max-w-6xl mx-auto">
       <NavTabs active={activeTab} onChange={setActiveTab} />
 
       {activeTab === "bills" && (
         <div className="mt-4">
           <div className="mb-4">
-            <h1 className="m-0 mb-2 text-2xl font-bold">📋 Early Bills</h1>
-            <p className="m-0 text-gray-500 text-sm leading-relaxed">
+            <h1 className="m-0 mb-2 text-xl sm:text-2xl font-bold">📋 Early Bills</h1>
+            <p className="m-0 text-gray-500 text-xs sm:text-sm leading-relaxed">
               Bills that haven't been voted on yet.
             </p>
           </div>
@@ -252,8 +252,8 @@ export default function App() {
       {activeTab === "votes" && (
         <div className="mt-4">
           <div className="mb-4">
-            <h1 className="m-0 mb-2 text-2xl font-bold">🗳️ House Roll-Call Votes</h1>
-            <p className="m-0 text-gray-500 text-sm leading-relaxed">
+            <h1 className="m-0 mb-2 text-xl sm:text-2xl font-bold">🗳️ House Roll-Call Votes</h1>
+            <p className="m-0 text-gray-500 text-xs sm:text-sm leading-relaxed">
               Bills that have been voted on by the House. View voting records and outcomes.
             </p>
           </div>
@@ -276,8 +276,8 @@ export default function App() {
       {activeTab === "members" && (
         <div className="mt-4">
           <div className="mb-4">
-            <h1 className="m-0 mb-2 text-2xl font-bold">👥 Members of Congress</h1>
-            <p className="m-0 text-gray-500 text-sm leading-relaxed">
+            <h1 className="m-0 mb-2 text-xl sm:text-2xl font-bold">👥 Members of Congress</h1>
+            <p className="m-0 text-gray-500 text-xs sm:text-sm leading-relaxed">
               Search for representatives to view their voting records and positions.
             </p>
           </div>
@@ -288,10 +288,10 @@ export default function App() {
             />
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="bg-white border border-gray-300 rounded-lg p-4">
-              <h3 className="text-lg font-bold mb-3">💡 How to Use</h3>
-              <ul className="space-y-2 text-sm text-gray-700">
+          <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2">
+            <div className="bg-white border border-gray-300 rounded-lg p-3 sm:p-4">
+              <h3 className="text-base sm:text-lg font-bold mb-2 sm:mb-3">💡 How to Use</h3>
+              <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm text-gray-700">
                 <li>• Search by name, state (e.g., "CA"), or party (D/R) above</li>
                 <li>• Click on a member to see their complete voting history</li>
                 <li>• View how they voted on specific bills and resolutions</li>
@@ -299,9 +299,9 @@ export default function App() {
               </ul>
             </div>
 
-            <div className="bg-white border border-gray-300 rounded-lg p-4">
-              <h3 className="text-lg font-bold mb-3">📊 Quick Stats</h3>
-              <div className="space-y-2 text-sm text-gray-700">
+            <div className="bg-white border border-gray-300 rounded-lg p-3 sm:p-4">
+              <h3 className="text-base sm:text-lg font-bold mb-2 sm:mb-3">📊 Quick Stats</h3>
+              <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm text-gray-700">
                 <div className="flex justify-between">
                   <span>House Members:</span>
                   <strong>435</strong>
@@ -318,9 +318,9 @@ export default function App() {
             </div>
           </div>
 
-          <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="text-sm font-bold text-blue-900 mb-2">💡 Tip</h3>
-            <p className="text-sm text-blue-800">
+          <div className="mt-4 sm:mt-6 bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+            <h3 className="text-xs sm:text-sm font-bold text-blue-900 mb-1.5 sm:mb-2">💡 Tip</h3>
+            <p className="text-xs sm:text-sm text-blue-800">
               You can also access member pages directly from the Votes tab by clicking on any representative's name in the voting tables.
             </p>
           </div>
@@ -329,15 +329,15 @@ export default function App() {
 
       {/* Vote detail modal - from votes tab */}
       {selectedVote && activeTab === "votes" && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-start justify-center overflow-y-auto p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full my-8">
-            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-xl font-bold">Roll Call Details</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-start justify-center overflow-y-auto p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full my-4 sm:my-8">
+            <div className="p-3 sm:p-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg sm:text-xl font-bold">Roll Call Details</h2>
               <button
                 onClick={() => setSelectedVote(null)}
-                className="px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 cursor-pointer"
+                className="px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 cursor-pointer text-sm sm:text-base"
               >
-                ✕ Close
+                ✕ <span className="hidden sm:inline">Close</span>
               </button>
             </div>
             <div className="p-4">
@@ -495,29 +495,32 @@ function VoteDetailContent({ meta, bill, counts, rows, onViewBill, onViewMember 
 
 function NavTabs({ active = "bills", onChange }) {
   const getTabClasses = (isActive) =>
-    `px-4 py-2.5 rounded-lg border border-gray-300 cursor-pointer font-semibold transition-colors ${
+    `px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-gray-300 cursor-pointer font-semibold transition-colors text-sm sm:text-base ${
       isActive ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-50"
     }`;
 
   return (
-    <div className="flex gap-2 flex-wrap border-b border-gray-200 pb-4">
+    <div className="flex gap-2 flex-wrap border-b border-gray-200 pb-3 sm:pb-4">
       <button
         className={getTabClasses(active === "bills")}
         onClick={() => onChange?.("bills")}
       >
-        📋 Bills
+        <span className="hidden sm:inline">📋 Bills</span>
+        <span className="sm:hidden">📋</span>
       </button>
       <button
         className={getTabClasses(active === "votes")}
         onClick={() => onChange?.("votes")}
       >
-        🗳️ Votes
+        <span className="hidden sm:inline">🗳️ Votes</span>
+        <span className="sm:hidden">🗳️</span>
       </button>
       <button
         className={getTabClasses(active === "members")}
         onClick={() => onChange?.("members")}
       >
-        👥 Members
+        <span className="hidden sm:inline">👥 Members</span>
+        <span className="sm:hidden">👥</span>
       </button>
     </div>
   );
