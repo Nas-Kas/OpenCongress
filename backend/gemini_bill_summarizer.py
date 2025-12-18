@@ -73,17 +73,17 @@ class GeminiBillSummarizer:
             
             print(f"PDF has {page_count} pages")
             
-            # If under 1000 pages, use original
+            # Gemini has a hard limit of 1000 pages for PDF uploads
             if page_count <= 1000:
                 doc.close()
                 return pdf_path, False
             
-            # Extract first 500 pages for large documents
-            print(f"PDF has {page_count} pages, extracting first 500 pages for analysis...")
+            # Extract first 1000 pages for large documents (Gemini's limit)
+            print(f"PDF has {page_count} pages, extracting first 1000 pages for analysis (Gemini limit)...")
             
-            # Create new PDF with first 500 pages
+            # Create new PDF with first 1000 pages (Gemini's limit)
             new_doc = PyMuPDF.open()
-            for page_num in range(min(500, page_count)):
+            for page_num in range(min(1000, page_count)):
                 new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
             
             # Save truncated PDF

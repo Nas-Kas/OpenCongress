@@ -89,11 +89,12 @@ class BillService:
         congress: int,
         bill_type: Optional[str] = None,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
+        search: Optional[str] = None
     ) -> dict:
         """Get bills that haven't been voted on."""
         rows, total = await self.bill_repo.get_bills_without_votes(
-            congress, bill_type, limit, offset
+            congress, bill_type, limit, offset, search
         )
         
         bills = []

@@ -316,6 +316,7 @@ async def fetch_member_profile(client, bioguide: str):
 
 async def reset_db(pool: asyncpg.Pool):
     async with pool.acquire() as conn:
+        await conn.execute("SET search_path = public, extensions")
         async with conn.transaction():
             await conn.execute("""
               TRUNCATE TABLE
@@ -620,7 +621,12 @@ async def run_update(congress: int, session: int, *, limit_recent=300, workers=1
     if not API_KEY or not DATABASE_URL:
         raise SystemExit("Missing CONGRESS_API_KEY or DATABASE_URL")
 
-    pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+    pool = await asyncpg.create_pool(
+        DATABASE_URL, 
+        min_size=1, 
+        max_size=10,
+        server_settings={'search_path': 'public,extensions'}
+    )
     timeout = httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=10.0)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         if reset_all:
@@ -663,7 +669,12 @@ async def run_full(congress: int, session: int, *, batch_size=200, workers=1,
         raise SystemExit("Missing CONGRESS_API_KEY or DATABASE_URL")
 
     feed = f"house-vote-{congress}-{session}"
-    pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+    pool = await asyncpg.create_pool(
+        DATABASE_URL, 
+        min_size=1, 
+        max_size=10,
+        server_settings={'search_path': 'public,extensions'}
+    )
     timeout = httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=10.0)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         if reset_all:

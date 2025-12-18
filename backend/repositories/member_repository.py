@@ -83,3 +83,21 @@ class MemberRepository:
                 limit
             )
         return [dict(r) for r in rows]
+
+    async def get_member_most_recent_votes(self, bioguide_id: str, limit: int = 1) -> List[dict]:
+        """Find the most recent congress/session where this member has votes."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT DISTINCT hv.congress, hv.session, MAX(hv.started) as latest_vote
+                FROM house_vote_members hvm
+                JOIN house_votes hv
+                  ON hv.congress=hvm.congress AND hv.session=hvm.session AND hv.roll=hvm.roll
+                WHERE hvm.bioguide_id=$1
+                GROUP BY hv.congress, hv.session
+                ORDER BY hv.congress DESC, hv.session DESC, latest_vote DESC
+                LIMIT $2
+                """,
+                bioguide_id.upper(), limit
+            )
+        return [dict(r) for r in rows]

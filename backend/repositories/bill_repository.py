@@ -75,7 +75,8 @@ class BillRepository:
         congress: int,
         bill_type: Optional[str] = None,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
+        search: Optional[str] = None
     ) -> tuple[List[dict], int]:
         """Get bills that haven't been voted on yet."""
         where_clause = "WHERE hv.congress IS NULL AND b.congress = $1"
@@ -84,6 +85,12 @@ class BillRepository:
         if bill_type:
             where_clause += " AND b.bill_type = $" + str(len(params) + 1)
             params.append(bill_type.lower())
+        
+        if search:
+            # Search in bill number or title
+            search_term = f"%{search}%"
+            where_clause += f" AND (b.bill_number ILIKE ${len(params) + 1} OR b.title ILIKE ${len(params) + 1})"
+            params.append(search_term)
         
         query = f"""
             SELECT 

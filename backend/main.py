@@ -55,7 +55,8 @@ async def startup():
     app.state.pool = await asyncpg.create_pool(
         DATABASE_URL, 
         min_size=1, 
-        max_size=10
+        max_size=10,
+        server_settings={'search_path': 'public,extensions'}
     )
     print("✓ Database connection pool initialized")
 

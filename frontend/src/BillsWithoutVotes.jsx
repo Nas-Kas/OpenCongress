@@ -1,65 +1,103 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { LoadingSpinner, ErrorMessage, BillCard } from "./components";
-import EducationalTooltip from "./EducationalTooltip";
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+
 export default function BillsWithoutVotes({ onSelectBill }) {
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Filter states
   const [congress, setCongress] = useState(119);
-  const [billType, setBillType] = useState("");
-  const [pagination, setPagination] = useState({ total: 0, limit: 50, offset: 0, hasMore: false });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [billType, setBillType] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const loadBills = async (newOffset = 0) => {
+  // Load bills from API
+  useEffect(() => {
+    const ctrl = new AbortController();
     setLoading(true);
     setError(null);
 
-    try {
-      const params = new URLSearchParams({
-        congress: congress.toString(),
-        limit: pagination.limit.toString(),
-        offset: newOffset.toString()
-      });
+    const params = new URLSearchParams({
+      congress: congress.toString(),
+      limit: "500" // Load more for client-side filtering
+    });
 
-      if (billType) {
-        params.append("bill_type", billType);
-      }
+    fetch(`${API_URL}/bills/no-votes?${params}`, { signal: ctrl.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        return r.json();
+      })
+      .then((data) => setBills(data.bills || []))
+      .catch((err) => {
+        if (err.name !== "AbortError") setError(err.message);
+      })
+      .finally(() => setLoading(false));
 
-      const response = await fetch(`${API_URL}/bills/no-votes?${params}`);
+    return () => ctrl.abort();
+  }, [congress]);
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch bills: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      setBills(data.bills);
-      setPagination({
-        total: data.total,
-        limit: pagination.limit, // Keep the current limit
-        offset: data.offset,
-        hasMore: data.hasMore
-      });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+  // Get unique bill types from loaded bills
+  const uniqueTypes = useMemo(() => {
+    const types = new Set();
+    for (const b of bills) {
+      if (b.billType) types.add(b.billType.toUpperCase());
     }
-  };
+    return Array.from(types).sort();
+  }, [bills]);
 
+  // Client-side filtering
+  const filtered = useMemo(() => {
+    let list = bills;
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const needle = searchQuery.toLowerCase();
+      list = list.filter(
+        (b) =>
+          (b.billNumber || "").toLowerCase().includes(needle) ||
+          (b.title || "").toLowerCase().includes(needle) ||
+          (b.billType || "").toLowerCase().includes(needle)
+      );
+    }
+
+    // Bill type filter
+    if (billType !== "all") {
+      list = list.filter((b) => (b.billType || "").toUpperCase() === billType.toUpperCase());
+    }
+
+    // Date filters
+    if (fromDate) {
+      list = list.filter((b) => (b.introducedDate || "") >= fromDate);
+    }
+    if (toDate) {
+      list = list.filter((b) => (b.introducedDate || "") <= toDate);
+    }
+
+    // Sort by most recent
+    return [...list].sort((a, b) =>
+      String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))
+    );
+  }, [bills, searchQuery, billType, fromDate, toDate]);
+
+  // Pagination
+  const paginatedBills = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filtered.slice(startIndex, endIndex);
+  }, [filtered, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+
+  // Reset to page 1 when filters change
   useEffect(() => {
-    loadBills();
-  }, [congress, billType]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handlePrevPage = () => {
-    const newOffset = Math.max(0, pagination.offset - pagination.limit);
-    loadBills(newOffset);
-  };
-
-  const handleNextPage = () => {
-    const newOffset = pagination.offset + pagination.limit;
-    loadBills(newOffset);
-  };
+    setCurrentPage(1);
+  }, [searchQuery, billType, fromDate, toDate, congress]);
 
   const navigateToBill = (bill) => {
     if (onSelectBill) {
@@ -71,7 +109,16 @@ export default function BillsWithoutVotes({ onSelectBill }) {
     }
   };
 
-  if (loading && bills.length === 0) {
+  const clearFilters = () => {
+    setSearchQuery("");
+    setBillType("all");
+    setFromDate("");
+    setToDate("");
+  };
+
+  const hasActiveFilters = searchQuery || billType !== "all" || fromDate || toDate;
+
+  if (loading) {
     return <LoadingSpinner message="Loading bills without votes..." />;
   }
 
@@ -82,80 +129,113 @@ export default function BillsWithoutVotes({ onSelectBill }) {
   return (
     <div className="px-5 py-4 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="m-0 mb-2 text-2xl lg:text-3xl text-gray-800">
-          📋 Early-Stage Bills
-        </h1>
-        <p className="m-0 text-gray-500 text-base leading-relaxed">
+      <div className="mb-4">
+        <h1 className="m-0 mb-2 text-xl sm:text-2xl font-bold">📋 Early-Stage Bills</h1>
+        <p className="m-0 text-gray-500 text-xs sm:text-sm leading-relaxed">
           Bills that haven't had House votes yet
         </p>
       </div>
 
-      {/* Filters */}
-      <div className="bg-gray-50 border border-gray-300 rounded-lg p-4 mb-5 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 items-end">
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">
-            CONGRESS
-          </label>
+      {/* Filters - matching House Roll-Call Votes layout */}
+      <div className="bg-gray-50 p-2 rounded-lg mb-4">
+        {/* Main filter row */}
+        <div className="grid grid-cols-[minmax(200px,1fr)_140px_140px_140px_140px_auto] gap-2 items-center mb-2">
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Filter by bill number or title..."
+            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm"
+          />
+          
           <select
             value={congress}
             onChange={(e) => setCongress(parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm"
           >
-            <option value={119}>119th Congress (2025-2026)</option>
-            <option value={118}>118th Congress (2023-2024)</option>
+            <option value={119}>119th Congress</option>
+            <option value={118}>118th Congress</option>
           </select>
-        </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">
-            BILL TYPE
-          </label>
           <select
             value={billType}
             onChange={(e) => setBillType(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm"
           >
-            <option value="">All Types</option>
-            <option value="hr">House Bills (HR)</option>
-            <option value="s">Senate Bills (S)</option>
-            <option value="hjres">House Joint Resolutions (HJRES)</option>
-            <option value="sjres">Senate Joint Resolutions (SJRES)</option>
-            <option value="hres">House Resolutions (HRES)</option>
-            <option value="sres">Senate Resolutions (SRES)</option>
+            <option value="all">All bill types</option>
+            {uniqueTypes.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
           </select>
+
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            placeholder="From date"
+            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm"
+          />
+
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            placeholder="To date"
+            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm"
+          />
+
+          <div className="flex gap-1.5">
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="border border-gray-300 bg-white text-gray-900 rounded-lg px-3 py-2 cursor-pointer text-sm hover:bg-gray-50"
+                title="Clear all filters"
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <EducationalTooltip
-            title="🎯 Early-Stage Betting"
-            content="These bills haven't been voted on yet"
-          >
-          </EducationalTooltip>
+        {/* Summary line */}
+        <div className="flex justify-between items-center mx-0.5 my-1.5 text-xs text-gray-500">
+          <span>
+            Showing <strong>{filtered.length}</strong> bills
+            {filtered.length > itemsPerPage && (
+              <> • Page {currentPage} of {totalPages}</>
+            )}
+          </span>
+          <div className="flex items-center gap-2">
+            <label className="text-xs">Per page:</label>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-2 py-1 text-xs border border-gray-300 rounded bg-white"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
         </div>
-      </div>
-
-      {/* Results Summary */}
-      <div className="mb-4 text-sm text-gray-500 flex justify-between items-center flex-wrap gap-2">
-        <span>
-          Showing {pagination.offset + 1}-{Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total} bills
-        </span>
-        {loading && (
-          <span className="text-blue-600">Loading...</span>
-        )}
       </div>
 
       {/* Bills List */}
-      {bills.length === 0 ? (
+      {paginatedBills.length === 0 ? (
         <div className="p-10 text-center bg-gray-50 border border-dashed border-gray-400 rounded-lg text-gray-500">
           <div className="text-2xl mb-2">📭</div>
           <p className="m-0">
-            No bills without votes found for the selected filters.
+            {hasActiveFilters
+              ? "No bills match your filters."
+              : "No bills without votes found."}
           </p>
         </div>
       ) : (
-        <div className="grid gap-4">
-          {bills.map((bill) => (
+        <div className="grid gap-3">
+          {paginatedBills.map((bill) => (
             <BillCard
               key={`${bill.congress}-${bill.billType}-${bill.billNumber}`}
               bill={bill}
@@ -167,30 +247,32 @@ export default function BillsWithoutVotes({ onSelectBill }) {
       )}
 
       {/* Pagination */}
-      {pagination.total > pagination.limit && (
-        <div className="flex justify-center items-center gap-4 mt-6 p-4">
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-4 mt-6">
           <button
-            onClick={handlePrevPage}
-            disabled={pagination.offset === 0}
-            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${pagination.offset === 0
-              ? "bg-gray-50 text-gray-400 cursor-not-allowed"
-              : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
-              }`}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${
+              currentPage === 1
+                ? "bg-gray-50 text-gray-400 cursor-not-allowed"
+                : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
+            }`}
           >
             ← Previous
           </button>
 
           <span className="text-sm text-gray-500">
-            Page {Math.floor(pagination.offset / pagination.limit) + 1} of {Math.ceil(pagination.total / pagination.limit)}
+            Page {currentPage} of {totalPages}
           </span>
 
           <button
-            onClick={handleNextPage}
-            disabled={!pagination.hasMore}
-            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${!pagination.hasMore
-              ? "bg-gray-50 text-gray-400 cursor-not-allowed"
-              : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
-              }`}
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium ${
+              currentPage === totalPages
+                ? "bg-gray-50 text-gray-400 cursor-not-allowed"
+                : "bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
+            }`}
           >
             Next →
           </button>

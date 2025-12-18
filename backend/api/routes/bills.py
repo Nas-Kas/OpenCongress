@@ -31,13 +31,14 @@ async def get_bills_without_votes(
     limit: int = Query(50, description="Number of bills to return"),
     offset: int = Query(0, description="Offset for pagination"),
     bill_type: Optional[str] = Query(None, description="Filter by bill type (hr, s, etc.)"),
+    search: Optional[str] = Query(None, description="Search by bill number or title"),
     pool: asyncpg.Pool = Depends(get_db_pool)
 ):
     """Get bills that haven't had House votes yet."""
     bill_repo = BillRepository(pool)
     bill_service = BillService(bill_repo)
     
-    return await bill_service.get_bills_without_votes(congress, bill_type, limit, offset)
+    return await bill_service.get_bills_without_votes(congress, bill_type, limit, offset, search)
 
 
 @router.get("/bill/{congress}/{bill_type}/{bill_number}")
@@ -265,9 +266,14 @@ async def embed_bill(
     bill_type: str,
     bill_number: str,
     request: EmbedBillRequest,
+    force: bool = False,
     pool: asyncpg.Pool = Depends(get_db_pool)
 ):
-    """Embed a bill for RAG queries."""
+    """
+    Embed a bill for RAG queries.
+    
+    - force: If True, re-embed even if chunks already exist (useful for fixing partial embeddings)
+    """
     if not GEMINI_API_KEY:
         raise HTTPException(500, "Missing GEMINI_API_KEY")
     
@@ -287,7 +293,8 @@ async def embed_bill(
                 raise HTTPException(404, "No PDF URL found for this bill in database")
         
         embedder = BillRAGEmbedder(GEMINI_API_KEY, pool)
-        await embedder.embed_bill(congress, bill_type, bill_number, pdf_url)
+        # Process in batches of 100 chunks to avoid timeouts
+        await embedder.embed_bill(congress, bill_type, bill_number, pdf_url, force=force, batch_size=100)
         
         chunk_count = await bill_repo.get_bill_chunk_count(congress, bill_type, bill_number)
         
