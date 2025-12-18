@@ -67,21 +67,30 @@ class BillRAGEmbedder:
         )
         return result.embeddings[0].values
     
-    async def embed_bill(self, congress: int, bill_type: str, bill_number: str, pdf_url: str):
+    async def embed_bill(self, congress: int, bill_type: str, bill_number: str, pdf_url: str, force: bool = False, batch_size: int = 100):
         """
         Download bill PDF, chunk it, embed chunks, and store in database
+        
+        Args:
+            congress: Congress number
+            bill_type: Bill type (hr, s, etc.)
+            bill_number: Bill number
+            pdf_url: URL to PDF
+            force: If True, re-embed even if chunks exist
+            batch_size: Number of chunks to process in each batch (for progress tracking)
         """
         print(f"\n=== Embedding {bill_type.upper()} {bill_number} ===")
         
-        # Check if already embedded
-        async with self.db_pool.acquire() as conn:
-            existing = await conn.fetchval(
-                "SELECT COUNT(*) FROM bill_chunks WHERE congress = $1 AND bill_type = $2 AND bill_number = $3",
-                congress, bill_type, bill_number
-            )
-            if existing > 0:
-                print(f"Already embedded ({existing} chunks). Skipping.")
-                return
+        # Check if already embedded (unless force=True)
+        if not force:
+            async with self.db_pool.acquire() as conn:
+                existing = await conn.fetchval(
+                    "SELECT COUNT(*) FROM bill_chunks WHERE congress = $1 AND bill_type = $2 AND bill_number = $3",
+                    congress, bill_type, bill_number
+                )
+                if existing > 0:
+                    print(f"Already embedded ({existing} chunks). Skipping. Use force=True to re-embed.")
+                    return
         
         # Download PDF
         print(f"Downloading PDF from {pdf_url}")
@@ -108,26 +117,33 @@ class BillRAGEmbedder:
             # Embed and store chunks
             print("Embedding chunks...")
             async with self.db_pool.acquire() as conn:
+                # Set search path to include extensions schema for vector type
+                await conn.execute("SET search_path = public, extensions")
+                
                 for i, chunk in enumerate(chunks):
                     if i % 10 == 0:
                         print(f"  Processing chunk {i+1}/{len(chunks)}")
                     
-                    # Generate embedding
-                    embedding = self.embed_text(chunk)
-                    
-                    # Convert embedding list to pgvector format string
-                    embedding_str = '[' + ','.join(map(str, embedding)) + ']'
-                    
-                    # Store in database
-                    await conn.execute(
-                        """
-                        INSERT INTO bill_chunks (congress, bill_type, bill_number, chunk_index, text, embedding)
-                        VALUES ($1, $2, $3, $4, $5, $6::vector)
-                        ON CONFLICT (congress, bill_type, bill_number, chunk_index) DO UPDATE
-                        SET text = EXCLUDED.text, embedding = EXCLUDED.embedding
-                        """,
-                        congress, bill_type, bill_number, i, chunk, embedding_str
-                    )
+                    try:
+                        # Generate embedding
+                        embedding = self.embed_text(chunk)
+                        
+                        # Convert embedding list to pgvector format string
+                        embedding_str = '[' + ','.join(map(str, embedding)) + ']'
+                        
+                        # Store in database
+                        await conn.execute(
+                            """
+                            INSERT INTO bill_chunks (congress, bill_type, bill_number, chunk_index, text, embedding)
+                            VALUES ($1, $2, $3, $4, $5, $6::vector)
+                            ON CONFLICT (congress, bill_type, bill_number, chunk_index) DO UPDATE
+                            SET text = EXCLUDED.text, embedding = EXCLUDED.embedding
+                            """,
+                            congress, bill_type, bill_number, i, chunk, embedding_str
+                        )
+                    except Exception as e:
+                        print(f"Error processing chunk {i}: {e}")
+                        raise
             
             print(f"✓ Successfully embedded {len(chunks)} chunks")
             
@@ -162,6 +178,9 @@ class BillRAGEmbedder:
         # Retrieve most relevant chunks
         print(f"Retrieving top {top_k} chunks...")
         async with self.db_pool.acquire() as conn:
+            # Set search path to include extensions schema for vector type
+            await conn.execute("SET search_path = public, extensions")
+            
             rows = await conn.fetch(
                 """
                 SELECT text, embedding <=> $1::vector AS distance

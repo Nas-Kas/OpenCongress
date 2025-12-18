@@ -306,7 +306,12 @@ async def embed_bill(
             "chunks": chunk_count
         }
     
+    except HTTPException:
+        raise
     except Exception as e:
+        import traceback
+        error_detail = f"Error embedding bill: {str(e)}\n{traceback.format_exc()}"
+        print(error_detail)  # Log to console
         raise HTTPException(500, f"Error embedding bill: {str(e)}")
 
 
