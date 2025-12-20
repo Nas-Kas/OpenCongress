@@ -315,6 +315,27 @@ async def embed_bill(
         raise HTTPException(500, f"Error embedding bill: {str(e)}")
 
 
+@router.get("/bill/{congress}/{bill_type}/{bill_number}/embedding-status")
+async def get_embedding_status(
+    congress: int,
+    bill_type: str,
+    bill_number: str,
+    pool: asyncpg.Pool = Depends(get_db_pool)
+):
+    """Check if a bill has been embedded for RAG queries (lightweight check)."""
+    bill_repo = BillRepository(pool)
+    
+    try:
+        chunk_count = await bill_repo.get_bill_chunk_count(congress, bill_type, bill_number)
+        
+        return {
+            "is_embedded": chunk_count > 0,
+            "chunk_count": chunk_count
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Error checking embedding status: {str(e)}")
+
+
 @router.post("/bill/{congress}/{bill_type}/{bill_number}/ask")
 async def query_bill(
     congress: int,

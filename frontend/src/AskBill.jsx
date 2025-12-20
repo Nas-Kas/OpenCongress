@@ -14,30 +14,16 @@ export default function AskBill({ congress, billType, billNumber }) {
   const checkIfEmbedded = async () => {
     try {
       const response = await fetch(
-        `${API_URL}/bill/${congress}/${billType}/${billNumber}/ask`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: 'test' })
-        }
+        `${API_URL}/bill/${congress}/${billType}/${billNumber}/embedding-status`
       );
       
-      if (response.status === 404) {
-        setIsEmbedded(false);
+      if (!response.ok) {
+        setIsEmbedded(null);
         return;
       }
       
       const data = await response.json();
-      
-      // If we got a success response with chunks_used, it's embedded
-      if (data.success && data.chunks_used !== undefined) {
-        setIsEmbedded(true);
-      } else if (data.answer && data.answer.includes('not been embedded')) {
-        setIsEmbedded(false);
-      } else {
-        // Default to embedded if we got a successful response
-        setIsEmbedded(true);
-      }
+      setIsEmbedded(data.is_embedded);
     } catch (err) {
       console.error('Error checking embedding status:', err);
       setIsEmbedded(null); // Unknown state
@@ -49,6 +35,8 @@ export default function AskBill({ congress, billType, billNumber }) {
   }, [congress, billType, billNumber]);
 
   const handleEmbed = async () => {
+    if (embedding) return; // Prevent multiple simultaneous embeds
+    
     setEmbedding(true);
     setError(null);
     setEmbeddingProgress('Starting embedding process (this may take a few minutes)...');
@@ -75,9 +63,13 @@ export default function AskBill({ congress, billType, billNumber }) {
       setIsEmbedded(true);
       
       // Clear progress message after 3 seconds
-      setTimeout(() => setEmbeddingProgress(null), 3000);
+      setTimeout(() => {
+        setEmbeddingProgress(null);
+        setEmbedding(false);
+      }, 3000);
     } catch (err) {
       setError(`Embedding failed: ${err.message}`);
+      setEmbeddingProgress(null);
       setEmbedding(false);
     }
   };
