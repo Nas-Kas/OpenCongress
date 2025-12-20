@@ -200,17 +200,125 @@ export default function AskBill({ congress, billType, billNumber }) {
 
       {/* Answer */}
       {answer && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-5 shadow-sm">
           <div className="flex items-start gap-3">
-            <div className="text-2xl">🤖</div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-blue-900 mb-2">Answer:</p>
-              <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                {answer.answer}
+            <div className="text-3xl flex-shrink-0">🤖</div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-bold text-blue-900 uppercase tracking-wide">AI Answer</p>
+                <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
+                  {answer.chunks_used}/{answer.total_chunks} sections
+                </span>
               </div>
-              <p className="text-xs text-gray-500 mt-3">
-                Based on {answer.chunks_used} of {answer.total_chunks} text sections
-              </p>
+              
+              <div className="prose prose-sm max-w-none">
+                <div className="space-y-4">
+                  {answer.answer.split('\n\n').map((section, sectionIdx) => {
+                    // Split section into sentences for better formatting
+                    const sentences = section.split(/(?<=[.!?])\s+/);
+                    
+                    return (
+                      <div key={sectionIdx} className="space-y-3">
+                        {sentences.map((sentence, sentIdx) => {
+                          const trimmed = sentence.trim();
+                          if (!trimmed) return null;
+                          
+                          // Handle bullet points with * marker
+                          if (trimmed.startsWith('* ')) {
+                            const content = trimmed.substring(2);
+                            // Check if it has a bold label (e.g., "* Label: text")
+                            const labelMatch = content.match(/^([^:]+):\s*(.+)/);
+                            if (labelMatch) {
+                              return (
+                                <div key={sentIdx} className="flex gap-2 ml-4 mb-2">
+                                  <span className="text-blue-600 font-bold flex-shrink-0">•</span>
+                                  <div>
+                                    <strong className="font-bold text-gray-900">{labelMatch[1]}:</strong>
+                                    <span className="text-gray-800"> {labelMatch[2]}</span>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div key={sentIdx} className="flex gap-2 ml-4 mb-2">
+                                <span className="text-blue-600 font-bold flex-shrink-0">•</span>
+                                <span className="text-gray-800">{content}</span>
+                              </div>
+                            );
+                          }
+                          
+                          // Handle regular bullet points
+                          if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
+                            const content = trimmed.substring(2);
+                            return (
+                              <div key={sentIdx} className="flex gap-2 ml-4 mb-2">
+                                <span className="text-blue-600 font-bold flex-shrink-0">•</span>
+                                <span className="text-gray-800">{content}</span>
+                              </div>
+                            );
+                          }
+                          
+                          // Handle numbered lists
+                          if (trimmed.match(/^\d+\.\s/)) {
+                            const content = trimmed.replace(/^\d+\.\s*/, '');
+                            const number = trimmed.match(/^(\d+)\./)[1];
+                            return (
+                              <div key={sentIdx} className="flex gap-2 ml-4 mb-2">
+                                <span className="text-blue-600 font-bold flex-shrink-0">{number}.</span>
+                                <span className="text-gray-800">{content}</span>
+                              </div>
+                            );
+                          }
+                          
+                          // Handle bold text with ** or * markers
+                          if (trimmed.includes('**') || trimmed.match(/\*[^*]+\*/)) {
+                            // Replace ** with bold
+                            let formatted = trimmed.split('**');
+                            return (
+                              <p key={sentIdx} className="text-gray-800 leading-relaxed mb-3">
+                                {formatted.map((part, i) => {
+                                  // Handle single * markers within parts
+                                  if (i % 2 === 0 && part.includes('*')) {
+                                    const subParts = part.split(/\*([^*]+)\*/);
+                                    return subParts.map((subPart, j) => 
+                                      j % 2 === 1 ? 
+                                        <strong key={`${i}-${j}`} className="font-bold text-gray-900">{subPart}</strong> : 
+                                        subPart
+                                    );
+                                  }
+                                  return i % 2 === 1 ? 
+                                    <strong key={i} className="font-bold text-gray-900">{part}</strong> : 
+                                    part;
+                                })}
+                              </p>
+                            );
+                          }
+                          
+                          // Regular sentences
+                          return (
+                            <p key={sentIdx} className="text-gray-800 leading-relaxed mb-3">
+                              {trimmed}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              <div className="mt-4 pt-3 border-t border-blue-200 flex items-center justify-between text-xs text-gray-600">
+                <span className="flex items-center gap-1">
+                  <span className="text-blue-600">✓</span>
+                  Answer generated from bill text
+                </span>
+                <button
+                  onClick={() => setAnswer(null)}
+                  className="text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  Clear
+                </button>
+              </div>
             </div>
           </div>
         </div>

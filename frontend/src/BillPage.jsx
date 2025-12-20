@@ -324,81 +324,110 @@ export default function BillPage({ billData: initialBillData, congress, billType
           )}
 
           {summary ? (
-            <div className="prose max-w-none">
-              {/* Display the full Gemini summary with basic markdown formatting */}
-              <div className="mb-4">
-                <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-                  {summary.tldr.split('\n').map((line, index) => {
-                    // Handle markdown-style headers
-                    if (line.startsWith('## ')) {
-                      return (
-                        <h3 key={index} className="text-lg font-semibold mt-6 mb-3 text-gray-900">
-                          {line.replace('## ', '')}
-                        </h3>
-                      );
-                    }
-                    // Handle bold text
-                    if (line.includes('**')) {
-                      const parts = line.split('**');
-                      return (
-                        <p key={index} className="mb-2">
-                          {parts.map((part, i) => 
-                            i % 2 === 1 ? <strong key={i}>{part}</strong> : part
-                          )}
-                        </p>
-                      );
-                    }
-                    // Handle bullet points
-                    if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-                      return (
-                        <li key={index} className="ml-4 mb-1">
-                          {line.trim().substring(2)}
-                        </li>
-                      );
-                    }
-                    // Handle numbered lists
-                    if (line.trim().match(/^\d+\.\s/)) {
-                      return (
-                        <li key={index} className="ml-4 mb-1 list-decimal">
-                          {line.trim().replace(/^\d+\.\s/, '')}
-                        </li>
-                      );
-                    }
-                    // Regular paragraphs
-                    if (line.trim()) {
-                      return <p key={index} className="mb-3">{line}</p>;
-                    }
-                    // Empty lines
-                    return <br key={index} />;
-                  })}
-                </div>
+            <div className="prose prose-sm max-w-none">
+              {/* Display the full Gemini summary with enhanced markdown formatting */}
+              <div className="space-y-4">
+                {summary.tldr.split('\n\n').map((section, sectionIdx) => {
+                  const lines = section.split('\n');
+                  
+                  return (
+                    <div key={sectionIdx}>
+                      {lines.map((line, lineIdx) => {
+                        // Handle markdown-style headers
+                        if (line.startsWith('## ')) {
+                          return (
+                            <h3 key={lineIdx} className="text-xl font-bold mt-6 mb-3 text-gray-900 border-b-2 border-blue-500 pb-2">
+                              {line.replace('## ', '')}
+                            </h3>
+                          );
+                        }
+                        
+                        if (line.startsWith('### ')) {
+                          return (
+                            <h4 key={lineIdx} className="text-lg font-semibold mt-4 mb-2 text-gray-800">
+                              {line.replace('### ', '')}
+                            </h4>
+                          );
+                        }
+                        
+                        // Handle bullet points
+                        if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+                          return (
+                            <li key={lineIdx} className="ml-6 mb-2 text-gray-700 leading-relaxed list-disc">
+                              {line.trim().substring(2).split('**').map((part, i) => 
+                                i % 2 === 1 ? <strong key={i} className="font-semibold text-gray-900">{part}</strong> : part
+                              )}
+                            </li>
+                          );
+                        }
+                        
+                        // Handle numbered lists
+                        if (line.trim().match(/^\d+\.\s/)) {
+                          return (
+                            <li key={lineIdx} className="ml-6 mb-2 text-gray-700 leading-relaxed list-decimal">
+                              {line.trim().replace(/^\d+\.\s/, '').split('**').map((part, i) => 
+                                i % 2 === 1 ? <strong key={i} className="font-semibold text-gray-900">{part}</strong> : part
+                              )}
+                            </li>
+                          );
+                        }
+                        
+                        // Handle bold text with **
+                        if (line.includes('**')) {
+                          const parts = line.split('**');
+                          return (
+                            <p key={lineIdx} className="mb-3 text-gray-800 leading-relaxed">
+                              {parts.map((part, i) => 
+                                i % 2 === 1 ? <strong key={i} className="font-semibold text-gray-900">{part}</strong> : part
+                              )}
+                            </p>
+                          );
+                        }
+                        
+                        // Regular paragraphs
+                        if (line.trim()) {
+                          return <p key={lineIdx} className="mb-3 text-gray-800 leading-relaxed">{line}</p>;
+                        }
+                        
+                        return null;
+                      })}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Show metadata at the bottom */}
-              <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-500">
-                <div className="flex items-center gap-4">
-                  {summary.importance && (
-                    <div className="flex items-center gap-1">
-                      <span>Importance:</span>
-                      <div className="flex">
-                        {[...Array(5)].map((_, i) => (
-                          <span
-                            key={i}
-                            className={`text-sm ${i < summary.importance ? "text-yellow-400" : "text-gray-300"}`}
-                          >
-                            ⭐
-                          </span>
-                        ))}
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    {summary.importance && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <span className="text-sm font-medium text-gray-700">Importance:</span>
+                        <div className="flex">
+                          {[...Array(5)].map((_, i) => (
+                            <span
+                              key={i}
+                              className={`text-lg ${i < summary.importance ? "text-yellow-500" : "text-gray-300"}`}
+                            >
+                              ⭐
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {summary.readingTime && (
-                    <span>📖 Reading time: {summary.readingTime}</span>
+                    )}
+                    {summary.readingTime && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+                        <span className="text-lg">📖</span>
+                        <span className="text-sm font-medium text-gray-700">{summary.readingTime}</span>
+                      </div>
+                    )}
+                  </div>
+                  {summary.cached && (
+                    <span className="text-sm px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 rounded-lg font-medium">
+                      ✓ Cached
+                    </span>
                   )}
                 </div>
-                {summary.cached && (
-                  <span className="text-green-600">✓ Cached</span>
-                )}
               </div>
             </div>
           ) : (
