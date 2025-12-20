@@ -274,9 +274,20 @@ export default function BillPage({ billData: initialBillData, congress, billType
               <div className="md:col-span-2">
                 <h3 className="font-semibold text-gray-900 mb-1">Latest Action</h3>
                 <p className="text-gray-700">
-                  {typeof billData.latestAction === 'object' 
+                  {typeof billData.latestAction === "object" 
                     ? billData.latestAction.text 
-                    : billData.latestAction}
+                    : (() => {
+                      try {
+                        const bText = JSON.parse(billData.latestAction)
+                        return  (
+                          bText.text + (bText.actionDate
+                            ? ` (${new Date(bText.actionDate).toLocaleDateString()})`
+                            : "")
+                        );
+                      } catch {
+                        return bText.latestAction
+                      }
+                    })()}
                 </p>
               </div>
             )}
