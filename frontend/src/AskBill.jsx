@@ -10,6 +10,8 @@ export default function AskBill({ congress, billType, billNumber }) {
   const [isEmbedded, setIsEmbedded] = useState(null);
   const [embedding, setEmbedding] = useState(false);
   const [embeddingProgress, setEmbeddingProgress] = useState(null);
+  const [jobId, setJobId] = useState(null);
+  const [pollInterval, setPollInterval] = useState(null);
 
   const checkIfEmbedded = async () => {
     try {
@@ -39,11 +41,9 @@ export default function AskBill({ congress, billType, billNumber }) {
     
     setEmbedding(true);
     setError(null);
-    setEmbeddingProgress('Starting embedding process (this may take a few minutes)...');
+    setEmbeddingProgress('Starting embedding process...');
 
     try {
-      setEmbeddingProgress('Looking up PDF URL from database...');
-      
       const embedResponse = await fetch(
         `${API_URL}/bill/${congress}/${billType}/${billNumber}/embed`,
         {
@@ -59,20 +59,91 @@ export default function AskBill({ congress, billType, billNumber }) {
       }
 
       const data = await embedResponse.json();
-      setEmbeddingProgress(`✓ Successfully embedded ${data.chunks} chunks!`);
-      setIsEmbedded(true);
       
-      // Clear progress message after 3 seconds
-      setTimeout(() => {
-        setEmbeddingProgress(null);
-        setEmbedding(false);
-      }, 3000);
+      if (data.job_id) {
+        // Background job started - poll for status
+        setJobId(data.job_id);
+        setEmbeddingProgress('Job started. Processing bill...');
+        startPolling(data.job_id);
+      } else if (data.success) {
+        // Synchronous completion (small bill)
+        setEmbeddingProgress(`✓ Successfully embedded ${data.chunks} chunks!`);
+        setIsEmbedded(true);
+        setTimeout(() => {
+          setEmbeddingProgress(null);
+          setEmbedding(false);
+        }, 3000);
+      }
     } catch (err) {
       setError(`Embedding failed: ${err.message}`);
       setEmbeddingProgress(null);
       setEmbedding(false);
     }
   };
+  
+  const startPolling = (newJobId) => {
+    // Clear any existing interval
+    if (pollInterval) {
+      clearInterval(pollInterval);
+    }
+    
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`${API_URL}/embed-status/${newJobId}`);
+        
+        if (!response.ok) {
+          throw new Error('Failed to get job status');
+        }
+        
+        const status = await response.json();
+        
+        // Update progress message
+        const progress = status.progress;
+        if (progress.total_pages > 0) {
+          setEmbeddingProgress(
+            `Processing: ${progress.pages_processed}/${progress.total_pages} pages ` +
+            `(${progress.percentage}%) • ${progress.chunks_embedded} chunks embedded`
+          );
+        } else {
+          setEmbeddingProgress(`Processing: ${progress.chunks_embedded} chunks embedded`);
+        }
+        
+        // Check if completed
+        if (status.status === 'completed') {
+          clearInterval(interval);
+          setPollInterval(null);
+          setEmbeddingProgress('✓ Embedding completed successfully!');
+          setIsEmbedded(true);
+          setTimeout(() => {
+            setEmbeddingProgress(null);
+            setEmbedding(false);
+            setJobId(null);
+          }, 3000);
+        } else if (status.status === 'failed') {
+          clearInterval(interval);
+          setPollInterval(null);
+          setError(status.error || 'Embedding job failed');
+          setEmbeddingProgress(null);
+          setEmbedding(false);
+          setJobId(null);
+        }
+      } catch (err) {
+        console.error('Error polling job status:', err);
+        // Don't stop polling on transient errors
+      }
+    }, 2000); // Poll every 2 seconds
+    
+    setPollInterval(interval);
+  };
+  
+  // Cleanup polling on unmount
+  React.useEffect(() => {
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [pollInterval]);
 
   const handleAsk = async (e) => {
     e.preventDefault();
@@ -121,15 +192,34 @@ export default function AskBill({ congress, billType, billNumber }) {
         <p className="text-sm text-yellow-700 mb-3">
           This bill hasn't been processed for Q&A yet. Click the button below to embed it (this may take a few minutes for large bills).
         </p>
+        
+        {embedding && embeddingProgress && (
+          <div className="mb-4">
+            <div className="bg-yellow-100 rounded-full h-2 mb-2 overflow-hidden">
+              <div 
+                className="bg-yellow-600 h-full transition-all duration-500 ease-out"
+                style={{
+                  width: embeddingProgress.includes('%') 
+                    ? embeddingProgress.match(/\((\d+)%\)/)?.[1] + '%' 
+                    : '0%'
+                }}
+              />
+            </div>
+            <p className="text-xs text-yellow-700 font-mono">
+              {embeddingProgress}
+            </p>
+          </div>
+        )}
+        
         <button
           onClick={handleEmbed}
           disabled={embedding}
-          className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium text-sm"
+          className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium text-sm transition-colors"
         >
           {embedding ? (
             <span className="flex items-center gap-2">
               <div className="w-4 h-4 border-2 border-white border-t-yellow-600 rounded-full animate-spin" />
-              {embeddingProgress || 'Embedding...'}
+              {jobId ? 'Processing...' : 'Starting...'}
             </span>
           ) : (
             '🚀 Embed This Bill for Q&A'
@@ -215,6 +305,26 @@ export default function AskBill({ congress, billType, billNumber }) {
                           const trimmed = sentence.trim();
                           if (!trimmed) return null;
                           
+                          // Helper function to format text with citations
+                          const formatWithCitations = (text) => {
+                            // Split by citation pattern [pp. X-Y] or [pp. X]
+                            const parts = text.split(/(\[pp\.\s*\d+(?:-\d+)?\])/g);
+                            return parts.map((part, i) => {
+                              if (part.match(/\[pp\.\s*\d+(?:-\d+)?\]/)) {
+                                return (
+                                  <span 
+                                    key={i} 
+                                    className="inline-block px-2 py-0.5 mx-1 bg-blue-100 text-blue-700 rounded text-xs font-mono font-semibold border border-blue-200"
+                                    title="Page reference from bill text"
+                                  >
+                                    {part}
+                                  </span>
+                                );
+                              }
+                              return part;
+                            });
+                          };
+                          
                           // Handle bullet points with * marker
                           if (trimmed.startsWith('* ')) {
                             const content = trimmed.substring(2);
@@ -226,7 +336,7 @@ export default function AskBill({ congress, billType, billNumber }) {
                                   <span className="text-blue-600 font-bold flex-shrink-0">•</span>
                                   <div>
                                     <strong className="font-bold text-gray-900">{labelMatch[1]}:</strong>
-                                    <span className="text-gray-800"> {labelMatch[2]}</span>
+                                    <span className="text-gray-800"> {formatWithCitations(labelMatch[2])}</span>
                                   </div>
                                 </div>
                               );
@@ -234,7 +344,7 @@ export default function AskBill({ congress, billType, billNumber }) {
                             return (
                               <div key={sentIdx} className="flex gap-2 ml-4 mb-2">
                                 <span className="text-blue-600 font-bold flex-shrink-0">•</span>
-                                <span className="text-gray-800">{content}</span>
+                                <span className="text-gray-800">{formatWithCitations(content)}</span>
                               </div>
                             );
                           }
@@ -245,7 +355,7 @@ export default function AskBill({ congress, billType, billNumber }) {
                             return (
                               <div key={sentIdx} className="flex gap-2 ml-4 mb-2">
                                 <span className="text-blue-600 font-bold flex-shrink-0">•</span>
-                                <span className="text-gray-800">{content}</span>
+                                <span className="text-gray-800">{formatWithCitations(content)}</span>
                               </div>
                             );
                           }
@@ -257,7 +367,7 @@ export default function AskBill({ congress, billType, billNumber }) {
                             return (
                               <div key={sentIdx} className="flex gap-2 ml-4 mb-2">
                                 <span className="text-blue-600 font-bold flex-shrink-0">{number}.</span>
-                                <span className="text-gray-800">{content}</span>
+                                <span className="text-gray-800">{formatWithCitations(content)}</span>
                               </div>
                             );
                           }
@@ -275,21 +385,21 @@ export default function AskBill({ congress, billType, billNumber }) {
                                     return subParts.map((subPart, j) => 
                                       j % 2 === 1 ? 
                                         <strong key={`${i}-${j}`} className="font-bold text-gray-900">{subPart}</strong> : 
-                                        subPart
+                                        formatWithCitations(subPart)
                                     );
                                   }
                                   return i % 2 === 1 ? 
-                                    <strong key={i} className="font-bold text-gray-900">{part}</strong> : 
-                                    part;
+                                    <strong key={i} className="font-bold text-gray-900">{formatWithCitations(part)}</strong> : 
+                                    formatWithCitations(part);
                                 })}
                               </p>
                             );
                           }
                           
-                          // Regular sentences
+                          // Regular sentences with citations
                           return (
                             <p key={sentIdx} className="text-gray-800 leading-relaxed mb-3">
-                              {trimmed}
+                              {formatWithCitations(trimmed)}
                             </p>
                           );
                         })}

@@ -13,3 +13,5 @@ openai
 requests
 google-genai
 pgvector
+asyncio
+asyncpg

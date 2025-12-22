@@ -1,75 +1,64 @@
 """
 Bill RAG Embedder - Chunks and embeds bill text for semantic search
+Supports large PDFs (3,000+ pages) with streaming processing
 """
 import os
 import asyncpg
 import asyncio
 from google import genai
-import fitz as PyMuPDF  # fitz
 import requests
-from typing import List, Tuple
-import re
+from typing import List, Dict, Optional
+import tempfile
+
+from streaming_pdf_processor import StreamingPDFProcessor
+
 
 class BillRAGEmbedder:
     def __init__(self, api_key: str, db_pool):
         self.api_key = api_key
         self.client = genai.Client(api_key=api_key)
         self.db_pool = db_pool
-        
-    def extract_text_from_pdf(self, pdf_path: str) -> str:
-        """Extract all text from PDF"""
-        doc = PyMuPDF.open(pdf_path)
-        text = ""
-        for page in doc:
-            text += page.get_text()
-        doc.close()
-        return text
-    
-    def chunk_text(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
-        """
-        Split text into overlapping chunks
-        
-        Args:
-            text: Full bill text
-            chunk_size: Target size in characters (roughly 250 tokens)
-            overlap: Overlap between chunks to preserve context
-        """
-        # Clean up text
-        text = re.sub(r'\s+', ' ', text).strip()
-        
-        chunks = []
-        start = 0
-        
-        while start < len(text):
-            end = start + chunk_size
-            
-            # Try to break at sentence boundary
-            if end < len(text):
-                # Look for period followed by space and capital letter
-                sentence_end = text.rfind('. ', start, end)
-                if sentence_end > start + chunk_size // 2:  # Don't break too early
-                    end = sentence_end + 1
-            
-            chunk = text[start:end].strip()
-            if chunk:
-                chunks.append(chunk)
-            
-            # Move start forward with overlap
-            start = end - overlap if end < len(text) else end
-        
-        return chunks
+        self.processor = StreamingPDFProcessor(
+            chunk_chars=3500,  # ~875 tokens
+            overlap_chars=600,  # ~150 tokens overlap
+            bucket_size=50  # 50 pages per bucket for hierarchical summarization
+        )
     
     def embed_text(self, text: str) -> List[float]:
-        """Generate embedding for text using Gemini"""
+        """Generate embedding for a single text using Gemini"""
         result = self.client.models.embed_content(
             model="models/text-embedding-004",
             contents=text
         )
         return result.embeddings[0].values
     
-    async def embed_bill(self, congress: int, bill_type: str, bill_number: str, pdf_url: str, force: bool = False, batch_size: int = 100):
+    def embed_texts_batch(self, texts: List[str]) -> List[List[float]]:
         """
-        Download bill PDF, chunk it, embed chunks, and store in database
+        Generate embeddings for multiple texts in one API call.
+        Much more efficient than individual calls.
+        """
+        if not texts:
+            return []
+        
+        result = self.client.models.embed_content(
+            model="models/text-embedding-004",
+            contents=texts
+        )
+        return [emb.values for emb in result.embeddings]
+    
+    async def embed_bill(
+        self, 
+        congress: int, 
+        bill_type: str, 
+        bill_number: str, 
+        pdf_url: str, 
+        force: bool = False, 
+        batch_size: int = 64,
+        job_id: Optional[int] = None
+    ):
+        """
+        Download bill PDF, stream process it, embed chunks, and store in database.
+        Handles bills of any size without memory issues.
         
         Args:
             congress: Congress number
@@ -77,7 +66,8 @@ class BillRAGEmbedder:
             bill_number: Bill number
             pdf_url: URL to PDF
             force: If True, re-embed even if chunks exist
-            batch_size: Number of chunks to process in each batch (for progress tracking)
+            batch_size: Number of chunks to embed in each batch (32-128 recommended)
+            job_id: Optional job ID for progress tracking
         """
         print(f"\n=== Embedding {bill_type.upper()} {bill_number} ===")
         
@@ -92,60 +82,79 @@ class BillRAGEmbedder:
                     print(f"Already embedded ({existing} chunks). Skipping. Use force=True to re-embed.")
                     return
         
+        # Delete existing chunks if force=True
+        if force:
+            async with self.db_pool.acquire() as conn:
+                await conn.execute(
+                    "DELETE FROM bill_chunks WHERE congress = $1 AND bill_type = $2 AND bill_number = $3",
+                    congress, bill_type, bill_number
+                )
+                print("Deleted existing chunks for re-embedding")
+        
         # Download PDF
         print(f"Downloading PDF from {pdf_url}")
-        response = requests.get(pdf_url, timeout=60)
+        response = requests.get(pdf_url, timeout=120, stream=True)
         response.raise_for_status()
         
         # Save to temp file
-        import tempfile
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-            temp_file.write(response.content)
+            for chunk in response.iter_content(chunk_size=8192):
+                temp_file.write(chunk)
             temp_path = temp_file.name
         
         try:
-            # Extract text
-            print("Extracting text from PDF...")
-            text = self.extract_text_from_pdf(temp_path)
-            print(f"Extracted {len(text)} characters")
+            # Get total pages
+            total_pages = self.processor.get_total_pages(temp_path)
+            print(f"PDF has {total_pages} pages")
             
-            # Chunk text
-            print("Chunking text...")
-            chunks = self.chunk_text(text)
-            print(f"Created {len(chunks)} chunks")
+            # Update job if provided
+            if job_id:
+                await self._update_job_progress(job_id, total_pages=total_pages)
             
-            # Embed and store chunks
-            print("Embedding chunks...")
-            async with self.db_pool.acquire() as conn:
-                # Set search path to include extensions schema for vector type
-                await conn.execute("SET search_path = public, extensions")
+            # Stream process PDF into chunks
+            print("Streaming PDF and creating chunks...")
+            chunks_buffer = []
+            total_chunks = 0
+            pages_processed = 0
+            
+            for chunk_data in self.processor.process_pdf_streaming(temp_path):
+                chunks_buffer.append(chunk_data)
+                pages_processed = max(pages_processed, chunk_data['page_end'])
                 
-                for i, chunk in enumerate(chunks):
-                    if i % 10 == 0:
-                        print(f"  Processing chunk {i+1}/{len(chunks)}")
+                # Process batch when buffer is full
+                if len(chunks_buffer) >= batch_size:
+                    await self._embed_and_store_batch(
+                        chunks_buffer, congress, bill_type, bill_number
+                    )
+                    total_chunks += len(chunks_buffer)
+                    print(f"  Embedded {total_chunks} chunks (pages 1-{pages_processed})")
                     
-                    try:
-                        # Generate embedding
-                        embedding = self.embed_text(chunk)
-                        
-                        # Convert embedding list to pgvector format string
-                        embedding_str = '[' + ','.join(map(str, embedding)) + ']'
-                        
-                        # Store in database
-                        await conn.execute(
-                            """
-                            INSERT INTO bill_chunks (congress, bill_type, bill_number, chunk_index, text, embedding)
-                            VALUES ($1, $2, $3, $4, $5, $6::vector)
-                            ON CONFLICT (congress, bill_type, bill_number, chunk_index) DO UPDATE
-                            SET text = EXCLUDED.text, embedding = EXCLUDED.embedding
-                            """,
-                            congress, bill_type, bill_number, i, chunk, embedding_str
+                    # Update job progress
+                    if job_id:
+                        await self._update_job_progress(
+                            job_id, 
+                            pages_processed=pages_processed,
+                            chunks_embedded=total_chunks
                         )
-                    except Exception as e:
-                        print(f"Error processing chunk {i}: {e}")
-                        raise
+                    
+                    chunks_buffer = []
             
-            print(f"✓ Successfully embedded {len(chunks)} chunks")
+            # Process final batch
+            if chunks_buffer:
+                await self._embed_and_store_batch(
+                    chunks_buffer, congress, bill_type, bill_number
+                )
+                total_chunks += len(chunks_buffer)
+                print(f"  Embedded {total_chunks} chunks (final batch)")
+                
+                if job_id:
+                    await self._update_job_progress(
+                        job_id,
+                        pages_processed=total_pages,
+                        chunks_embedded=total_chunks
+                    )
+            
+            print(f"✓ Successfully embedded {total_chunks} chunks from {total_pages} pages")
             
         finally:
             # Clean up temp file
@@ -154,9 +163,96 @@ class BillRAGEmbedder:
             except:
                 pass
     
-    async def query_bill(self, congress: int, bill_type: str, bill_number: str, question: str, top_k: int = 6) -> str:
+    async def _embed_and_store_batch(
+        self,
+        chunks: List[Dict],
+        congress: int,
+        bill_type: str,
+        bill_number: str
+    ):
+        """Embed a batch of chunks and store them in the database."""
+        if not chunks:
+            return
+        
+        # Extract texts for embedding
+        texts = [chunk['text'] for chunk in chunks]
+        
+        # Batch embed all texts
+        embeddings = self.embed_texts_batch(texts)
+        
+        # Prepare data for bulk insert
+        insert_data = []
+        for chunk, embedding in zip(chunks, embeddings):
+            embedding_str = '[' + ','.join(map(str, embedding)) + ']'
+            insert_data.append((
+                congress,
+                bill_type,
+                bill_number,
+                chunk['chunk_index'],
+                chunk['text'],
+                embedding_str,
+                chunk['page_start'],
+                chunk['page_end'],
+                chunk['bucket_id']
+            ))
+        
+        # Bulk insert into database
+        async with self.db_pool.acquire() as conn:
+            await conn.execute("SET search_path = public, extensions")
+            
+            await conn.executemany(
+                """
+                INSERT INTO bill_chunks 
+                  (congress, bill_type, bill_number, chunk_index, text, embedding,
+                   page_start, page_end, bucket_id)
+                VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9)
+                ON CONFLICT (congress, bill_type, bill_number, chunk_index) DO UPDATE
+                SET text = EXCLUDED.text, 
+                    embedding = EXCLUDED.embedding,
+                    page_start = EXCLUDED.page_start,
+                    page_end = EXCLUDED.page_end,
+                    bucket_id = EXCLUDED.bucket_id
+                """,
+                insert_data
+            )
+    
+    async def _update_job_progress(
+        self,
+        job_id: int,
+        total_pages: Optional[int] = None,
+        pages_processed: Optional[int] = None,
+        chunks_embedded: Optional[int] = None
+    ):
+        """Update job progress in database."""
+        updates = []
+        params = [job_id]
+        param_idx = 2
+        
+        if total_pages is not None:
+            updates.append(f"total_pages = ${param_idx}")
+            params.append(total_pages)
+            param_idx += 1
+        
+        if pages_processed is not None:
+            updates.append(f"pages_processed = ${param_idx}")
+            params.append(pages_processed)
+            param_idx += 1
+        
+        if chunks_embedded is not None:
+            updates.append(f"chunks_embedded = ${param_idx}")
+            params.append(chunks_embedded)
+            param_idx += 1
+        
+        if updates:
+            async with self.db_pool.acquire() as conn:
+                await conn.execute(
+                    f"UPDATE bill_embedding_jobs SET {', '.join(updates)}, status = 'processing' WHERE job_id = $1",
+                    *params
+                )
+    
+    async def query_bill(self, congress: int, bill_type: str, bill_number: str, question: str, top_k: int = 8) -> str:
         """
-        Query a bill using RAG
+        Query a bill using RAG with page citations.
         
         Args:
             congress, bill_type, bill_number: Bill identifier
@@ -164,7 +260,7 @@ class BillRAGEmbedder:
             top_k: Number of chunks to retrieve
             
         Returns:
-            AI-generated answer based on retrieved chunks
+            AI-generated answer with page citations
         """
         print(f"\n=== Querying {bill_type.upper()} {bill_number}: {question} ===")
         
@@ -175,15 +271,14 @@ class BillRAGEmbedder:
         # Convert embedding to pgvector format
         embedding_str = '[' + ','.join(map(str, question_embedding)) + ']'
         
-        # Retrieve most relevant chunks
+        # Retrieve most relevant chunks WITH page metadata
         print(f"Retrieving top {top_k} chunks...")
         async with self.db_pool.acquire() as conn:
-            # Set search path to include extensions schema for vector type
             await conn.execute("SET search_path = public, extensions")
             
             rows = await conn.fetch(
                 """
-                SELECT text, embedding <=> $1::vector AS distance
+                SELECT text, page_start, page_end, embedding <=> $1::vector AS distance
                 FROM bill_chunks
                 WHERE congress = $2 AND bill_type = $3 AND bill_number = $4
                 ORDER BY embedding <=> $1::vector
@@ -195,18 +290,26 @@ class BillRAGEmbedder:
         if not rows:
             return "This bill has not been embedded yet. Please embed it first."
         
-        # Combine retrieved chunks
-        context = "\n\n---\n\n".join([row['text'] for row in rows])
+        # Format context with page citations
+        context_parts = []
+        for row in rows:
+            page_range = f"pp. {row['page_start']}-{row['page_end']}" if row['page_start'] and row['page_end'] else "page unknown"
+            context_parts.append(f"[{page_range}]\n{row['text']}")
+        
+        context = "\n\n---\n\n".join(context_parts)
         print(f"Retrieved {len(rows)} chunks (avg distance: {sum(r['distance'] for r in rows)/len(rows):.3f})")
         
-        # Generate answer using Gemini
+        # Generate answer using Gemini with citation requirements
         prompt = f"""You are an assistant answering questions about legislative text.
 
-Use only the context provided below to answer the question. If the context does not contain enough information to answer, say "The bill text does not contain enough information to answer this."
-
-If calculations or aggregation (like totals) are needed, perform them based only on the context.
-
-Do not use outside knowledge. Do not guess. Do not add interpretation beyond what the text states.
+CRITICAL RULES:
+1. Use ONLY the context provided below
+2. CITE page ranges for every major claim using [pp. X-Y] format
+3. If the context doesn't contain enough information, explicitly say:
+   "The retrieved text does not contain enough information to answer this."
+4. Do NOT use outside knowledge
+5. Do NOT guess or infer beyond what the text states
+6. When citing, use the page ranges shown in the context
 
 [CONTEXT]
 {context}
@@ -214,7 +317,7 @@ Do not use outside knowledge. Do not guess. Do not add interpretation beyond wha
 [QUESTION]
 {question}
 
-[ANSWER]"""
+[ANSWER WITH CITATIONS]"""
         
         print("Generating answer with Gemini...")
         response = self.client.models.generate_content(

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import Optional
 from pydantic import BaseModel
 import asyncpg
+import asyncio
 import os
 import re
 from dotenv import load_dotenv
@@ -267,12 +268,16 @@ async def embed_bill(
     bill_number: str,
     request: EmbedBillRequest,
     force: bool = False,
+    background: bool = True,  # Run as background job by default for large bills
     pool: asyncpg.Pool = Depends(get_db_pool)
 ):
     """
     Embed a bill for RAG queries.
     
-    - force: If True, re-embed even if chunks already exist (useful for fixing partial embeddings)
+    - force: If True, re-embed even if chunks already exist
+    - background: If True, run as background job (recommended for large bills)
+    
+    Returns job_id if background=True, otherwise waits for completion.
     """
     if not GEMINI_API_KEY:
         raise HTTPException(500, "Missing GEMINI_API_KEY")
@@ -280,6 +285,7 @@ async def embed_bill(
     bill_repo = BillRepository(pool)
     
     try:
+        # Get PDF URL
         pdf_url = request.pdf_url
         
         if not pdf_url:
@@ -292,27 +298,161 @@ async def embed_bill(
             if not pdf_url:
                 raise HTTPException(404, "No PDF URL found for this bill in database")
         
-        embedder = BillRAGEmbedder(GEMINI_API_KEY, pool)
-        # Process in batches of 100 chunks to avoid timeouts
-        await embedder.embed_bill(congress, bill_type, bill_number, pdf_url, force=force, batch_size=100)
+        # Check for existing job
+        from background_jobs import get_or_create_job, EmbeddingJobManager, run_embedding_job
         
-        chunk_count = await bill_repo.get_bill_chunk_count(congress, bill_type, bill_number)
+        existing_job_id = await get_or_create_job(congress, bill_type, bill_number, pool)
+        if existing_job_id:
+            return {
+                "job_id": existing_job_id,
+                "status": "already_running",
+                "message": f"Embedding job {existing_job_id} is already running for this bill."
+            }
         
-        return {
-            "success": True,
-            "congress": congress,
-            "bill_type": bill_type,
-            "bill_number": bill_number,
-            "chunks": chunk_count
-        }
+        if background:
+            # Create job
+            job_manager = EmbeddingJobManager(pool)
+            job_id = await job_manager.create_job(congress, bill_type, bill_number)
+            
+            # Start background task with error handling
+            async def run_with_error_handling():
+                try:
+                    await run_embedding_job(
+                        job_id, congress, bill_type, bill_number, pdf_url,
+                        GEMINI_API_KEY, pool, force
+                    )
+                except Exception as e:
+                    print(f"Background job {job_id} failed with error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    await job_manager.complete_job(job_id, success=False, error=str(e))
+            
+            asyncio.create_task(run_with_error_handling())
+            
+            return {
+                "job_id": job_id,
+                "status": "started",
+                "message": "Embedding job started. Use /embed-status/{job_id} to check progress.",
+                "poll_url": f"/embed-status/{job_id}"
+            }
+        else:
+            # Run synchronously (not recommended for large bills)
+            embedder = BillRAGEmbedder(GEMINI_API_KEY, pool)
+            await embedder.embed_bill(congress, bill_type, bill_number, pdf_url, force=force)
+            
+            chunk_count = await bill_repo.get_bill_chunk_count(congress, bill_type, bill_number)
+            
+            return {
+                "success": True,
+                "congress": congress,
+                "bill_type": bill_type,
+                "bill_number": bill_number,
+                "chunks": chunk_count
+            }
     
     except HTTPException:
         raise
     except Exception as e:
         import traceback
         error_detail = f"Error embedding bill: {str(e)}\n{traceback.format_exc()}"
-        print(error_detail)  # Log to console
+        print(error_detail)
         raise HTTPException(500, f"Error embedding bill: {str(e)}")
+
+
+@router.get("/embed-status/{job_id}")
+async def get_embed_status(
+    job_id: int,
+    pool: asyncpg.Pool = Depends(get_db_pool)
+):
+    """
+    Get the status of an embedding job.
+    
+    Returns progress information including:
+    - status: pending, processing, completed, failed
+    - pages_processed / total_pages
+    - chunks_embedded
+    - map_summaries_done
+    - reduce_done
+    """
+    from background_jobs import EmbeddingJobManager
+    
+    job_manager = EmbeddingJobManager(pool)
+    status = await job_manager.get_job_status(job_id)
+    
+    if not status:
+        raise HTTPException(404, "Job not found")
+    
+    # Calculate progress percentage
+    progress_pct = 0
+    if status['total_pages'] and status['total_pages'] > 0:
+        progress_pct = int((status['pages_processed'] or 0) / status['total_pages'] * 100)
+    
+    return {
+        "job_id": job_id,
+        "status": status['status'],
+        "progress": {
+            "total_pages": status['total_pages'],
+            "pages_processed": status['pages_processed'] or 0,
+            "chunks_embedded": status['chunks_embedded'] or 0,
+            "map_summaries_done": status['map_summaries_done'] or 0,
+            "reduce_done": status['reduce_done'] or False,
+            "percentage": progress_pct
+        },
+        "error": status['error_message'],
+        "started_at": status['started_at'].isoformat() if status['started_at'] else None,
+        "completed_at": status['completed_at'].isoformat() if status['completed_at'] else None
+    }
+
+
+@router.post("/bill/{congress}/{bill_type}/{bill_number}/generate-hierarchical-summary")
+async def generate_hierarchical_summary(
+    congress: int,
+    bill_type: str,
+    bill_number: str,
+    pool: asyncpg.Pool = Depends(get_db_pool)
+):
+    """
+    Generate hierarchical summary for a large bill (map-reduce approach).
+    Bill must be embedded first.
+    """
+    if not GEMINI_API_KEY:
+        raise HTTPException(500, "Missing GEMINI_API_KEY")
+    
+    bill_repo = BillRepository(pool)
+    
+    try:
+        # Check if bill is embedded
+        chunk_count = await bill_repo.get_bill_chunk_count(congress, bill_type, bill_number)
+        if chunk_count == 0:
+            raise HTTPException(404, "Bill has not been embedded yet. Please embed it first.")
+        
+        # Generate hierarchical summary
+        from hierarchical_summarizer import HierarchicalSummarizer
+        
+        summarizer = HierarchicalSummarizer(GEMINI_API_KEY, pool)
+        
+        # Map step
+        await summarizer.generate_bucket_summaries(congress, bill_type, bill_number)
+        
+        # Reduce step
+        summary_data = await summarizer.generate_final_summary(congress, bill_type, bill_number)
+        
+        if not summary_data:
+            raise HTTPException(500, "Failed to generate summary")
+        
+        return {
+            "success": True,
+            "summary": summary_data,
+            "method": "hierarchical"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"Error generating hierarchical summary: {str(e)}\n{traceback.format_exc()}"
+        print(error_detail)
+        raise HTTPException(500, f"Error generating summary: {str(e)}")
 
 
 @router.get("/bill/{congress}/{bill_type}/{bill_number}/embedding-status")

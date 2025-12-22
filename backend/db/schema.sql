@@ -116,6 +116,10 @@ CREATE TABLE IF NOT EXISTS bill_chunks (
   chunk_index INT NOT NULL,  -- Order of chunk in the bill
   text        TEXT NOT NULL,  -- The actual chunk text
   embedding   VECTOR(768),    -- Gemini embedding dimension
+  page_start  INT,            -- Starting page number
+  page_end    INT,            -- Ending page number
+  bucket_id   INT,            -- Bucket for hierarchical summarization (e.g., floor((page_start-1)/50))
+  section_title TEXT,         -- Optional section identifier
   created_at  TIMESTAMPTZ DEFAULT now(),
   FOREIGN KEY (congress, bill_type, bill_number) 
     REFERENCES bills (congress, bill_type, bill_number) 
@@ -130,3 +134,50 @@ CREATE INDEX IF NOT EXISTS bill_chunks_embedding_idx ON bill_chunks
 
 -- Index for filtering by bill
 CREATE INDEX IF NOT EXISTS bill_chunks_bill_idx ON bill_chunks (congress, bill_type, bill_number);
+
+-- Index for page-based queries
+CREATE INDEX IF NOT EXISTS bill_chunks_pages_idx ON bill_chunks (congress, bill_type, bill_number, page_start, page_end);
+
+-- Store chunk-level or bucket-level summaries for hierarchical summarization
+CREATE TABLE IF NOT EXISTS bill_chunk_summaries (
+  summary_id  SERIAL PRIMARY KEY,
+  congress    INT NOT NULL,
+  bill_type   TEXT NOT NULL,
+  bill_number TEXT NOT NULL,
+  bucket_id   INT NOT NULL,           -- Bucket identifier (e.g., 50-page buckets)
+  page_start  INT NOT NULL,
+  page_end    INT NOT NULL,
+  summary_text TEXT NOT NULL,         -- Structured summary (JSON or markdown)
+  key_provisions TEXT[],              -- Array of key provisions
+  financial_impact TEXT,              -- Financial impact summary
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  FOREIGN KEY (congress, bill_type, bill_number) 
+    REFERENCES bills (congress, bill_type, bill_number) 
+    ON DELETE CASCADE,
+  UNIQUE (congress, bill_type, bill_number, bucket_id)
+);
+
+CREATE INDEX IF NOT EXISTS bill_chunk_summaries_bill_idx ON bill_chunk_summaries (congress, bill_type, bill_number);
+
+-- Track embedding jobs for large bills
+CREATE TABLE IF NOT EXISTS bill_embedding_jobs (
+  job_id      SERIAL PRIMARY KEY,
+  congress    INT NOT NULL,
+  bill_type   TEXT NOT NULL,
+  bill_number TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'pending', -- pending, processing, completed, failed
+  total_pages INT,
+  pages_processed INT DEFAULT 0,
+  chunks_embedded INT DEFAULT 0,
+  map_summaries_done INT DEFAULT 0,
+  reduce_done BOOLEAN DEFAULT false,
+  error_message TEXT,
+  started_at  TIMESTAMPTZ DEFAULT now(),
+  completed_at TIMESTAMPTZ,
+  FOREIGN KEY (congress, bill_type, bill_number) 
+    REFERENCES bills (congress, bill_type, bill_number) 
+    ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS bill_embedding_jobs_status_idx ON bill_embedding_jobs (status, started_at);
+CREATE INDEX IF NOT EXISTS bill_embedding_jobs_bill_idx ON bill_embedding_jobs (congress, bill_type, bill_number);

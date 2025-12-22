@@ -406,39 +406,8 @@ export default function BillPage({ billData: initialBillData, congress, billType
                   );
                 })}
               </div>
-
-              {/* Show metadata at the bottom */}
               <div className="mt-6 pt-4 border-t border-gray-200">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div className="flex items-center gap-4 flex-wrap">
-                    {summary.importance && (
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <span className="text-sm font-medium text-gray-700">Importance:</span>
-                        <div className="flex">
-                          {[...Array(5)].map((_, i) => (
-                            <span
-                              key={i}
-                              className={`text-lg ${i < summary.importance ? "text-yellow-500" : "text-gray-300"}`}
-                            >
-                              ⭐
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {summary.readingTime && (
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
-                        <span className="text-lg">📖</span>
-                        <span className="text-sm font-medium text-gray-700">{summary.readingTime}</span>
-                      </div>
-                    )}
-                  </div>
-                  {summary.cached && (
-                    <span className="text-sm px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 rounded-lg font-medium">
-                      ✓ Cached
-                    </span>
-                  )}
-                </div>
+                
               </div>
             </div>
           ) : (
