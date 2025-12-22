@@ -298,18 +298,27 @@ class BillRAGEmbedder:
         
         context = "\n\n---\n\n".join(context_parts)
         print(f"Retrieved {len(rows)} chunks (avg distance: {sum(r['distance'] for r in rows)/len(rows):.3f})")
-        
-        # Generate answer using Gemini with citation requirements
-        prompt = f"""You are an assistant answering questions about legislative text.
 
-CRITICAL RULES:
-1. Use ONLY the context provided below
-2. CITE page ranges for every major claim using [pp. X-Y] format
-3. If the context doesn't contain enough information, explicitly say:
-   "The retrieved text does not contain enough information to answer this."
-4. Do NOT use outside knowledge
-5. Do NOT guess or infer beyond what the text states
-6. When citing, use the page ranges shown in the context
+        prompt = f"""You are answering a question about a U.S. congressional bill.
+
+Produce TWO clearly labeled sections:
+
+1. 🧠 Plain-English Explanation
+   - Explain what the bill means in everyday language.
+   - This is your interpretation.
+   - Be clear, concise, and readable for a general audience.
+   - You may paraphrase and explain implications.
+
+2. 📜 What the Bill Actually Says
+   - Quote or closely paraphrase the relevant parts of the provided context.
+   - Use the page ranges shown in the context for citations.
+   - Do not introduce information not found in the context.
+
+Rules:
+- Base your answer on the provided context.
+- Do NOT add new facts, numbers, or claims not supported by the text.
+- If the context does not clearly answer the question, say so explicitly.
+- Do not hide interpretation—make it explicit.
 
 [CONTEXT]
 {context}
@@ -317,7 +326,8 @@ CRITICAL RULES:
 [QUESTION]
 {question}
 
-[ANSWER WITH CITATIONS]"""
+[ANSWER]
+"""
         
         print("Generating answer with Gemini...")
         response = self.client.models.generate_content(
