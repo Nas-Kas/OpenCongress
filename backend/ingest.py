@@ -1,6 +1,6 @@
-import os, asyncio, argparse, json, zlib
+import os, asyncio, argparse, json, zlib, re
 from datetime import datetime, date
-from typing import Optional, Tuple, Iterable
+from typing import Optional, Tuple, Iterable, List, Dict
 
 import httpx
 import asyncpg
@@ -32,104 +32,58 @@ def pick_vote_block(payload: dict) -> dict:
         if isinstance(vv, dict): return vv
     return {}
 
-# Mapping of procedural vote questions to their associated bills
-# This handles edge cases where all parsing methods fail
-# Format: (congress, session, roll): (rule_type, rule_num, subject_type, subject_num)
 PROCEDURAL_VOTE_MAPPINGS = {
-    # Only add truly ambiguous cases here - most votes are now parsed automatically
-    # Example: (119, 1, 305): ("HCONRES", "58", "HR", "456"),
+    # (congress, session, roll): ("HCONRES", "58", "HR", "456"),
 }
 
-import re
-
 def parse_bill_from_question(question: str) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Extract bill type and number from vote question text.
-    Returns (bill_type, bill_number) or (None, None) if not found.
-    
-    Handles patterns like:
-    - "On Passage of H.R. 1949"
-    - "On Agreeing to H. Con. Res. 58"
-    - "On Motion to Recommit S. 2341"
-    """
     if not question:
         return None, None
-    
-    # Patterns for different bill types (order matters - most specific first)
+
     patterns = [
-        # House/Senate Concurrent Resolutions: H.Con.Res., H. Con. Res., HCONRES, etc.
-        (r'\b(H\.?\s*Con\.?\s*Res\.?|S\.?\s*Con\.?\s*Res\.?)\s+(\d+)\b', 
+        (r'\b(H\.?\s*Con\.?\s*Res\.?|S\.?\s*Con\.?\s*Res\.?)\s+(\d+)\b',
          {'HCONRES': 'HCONRES', 'SCONRES': 'SCONRES'}),
-        
-        # House/Senate Joint Resolutions: H.J.Res., H. J. Res., HJRES, etc.
         (r'\b(H\.?\s*J\.?\s*Res\.?|S\.?\s*J\.?\s*Res\.?)\s+(\d+)\b',
          {'HJRES': 'HJRES', 'SJRES': 'SJRES'}),
-        
-        # House/Senate Simple Resolutions: H.Res., H. Res., HRES, etc.
         (r'\b(H\.?\s*Res\.?|S\.?\s*Res\.?)\s+(\d+)\b',
          {'HRES': 'HRES', 'SRES': 'SRES'}),
-        
-        # House/Senate Bills: H.R., H. R., HR, S., etc.
         (r'\b(H\.?\s*R\.?|S\.?)\s+(\d+)\b',
          {'HR': 'HR', 'S': 'S'}),
     ]
-    
+
     for pattern, type_map in patterns:
         match = re.search(pattern, question, re.IGNORECASE)
         if match:
             bill_type_raw = match.group(1)
             bill_number = match.group(2)
-            
-            # Normalize bill type (remove dots, spaces, make uppercase)
             bill_type_normalized = re.sub(r'[.\s]', '', bill_type_raw).upper()
-            
-            # Map to standard format
             bill_type = type_map.get(bill_type_normalized, bill_type_normalized)
-            
             return bill_type, bill_number
-    
+
     return None, None
 
-
 async def parse_subject_bill_from_hres(
-    client: httpx.AsyncClient, 
-    congress: int, 
+    client: httpx.AsyncClient,
+    congress: int,
     hres_number: str
 ) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Parse the subject bill from an HRES title.
-    
-    HRES titles often follow patterns like:
-    - "Providing for consideration of H.R. 456"
-    - "Waiving points of order against the bill H.R. 789"
-    
-    Returns (subject_bill_type, subject_bill_number) or (None, None)
-    """
     try:
-        # Fetch HRES details from API
         url = f"{BASE_URL}/bill/{congress}/hres/{hres_number}"
         params = {"api_key": API_KEY}
-        
         resp = await client.get(url, params=params, timeout=10.0)
         if resp.status_code != 200:
             return None, None
-        
         data = resp.json()
         bill_data = data.get("bill", {})
         title = bill_data.get("title", "")
-        
         if not title:
             return None, None
-        
-        # Parse bill reference from title
         return parse_bill_from_question(title)
-        
     except Exception as e:
         print(f"[warning] Failed to fetch HRES {hres_number} for subject bill parsing: {e}")
         return None, None
 
 def to_date(v) -> Optional[date]:
-    """Parse 'YYYY-MM-DD' or ISO datetime strings into a date, else None."""
     if not v:
         return None
     s = str(v).strip()
@@ -143,7 +97,6 @@ def to_date(v) -> Optional[date]:
         return None
 
 async def get_json(client: httpx.AsyncClient, url: str, params: dict | None = None, *, max_retries=3):
-    """GET with basic 429 retry + timeout handling."""
     attempt = 0
     while True:
         try:
@@ -190,27 +143,34 @@ ON CONFLICT (congress, session, roll) DO UPDATE SET
   not_voting_count    = COALESCE(EXCLUDED.not_voting_count, hv.not_voting_count)
 """
 
-HOUSE_VOTE_MEMBERS_UPSERT = """
+# IMPORTANT: We will NOT upsert into members for each ballot anymore.
+# We will only insert missing bioguide IDs once per roll (cheap), and later
+# enrich with member endpoint (name/party/state/image) in enrich step.
+ENSURE_MEMBERS_EXIST = """
+INSERT INTO members AS m (bioguide_id, name, party, state, image_url, updated_at)
+SELECT x.bioguide_id, NULL, NULL, NULL, NULL, now()
+FROM UNNEST($1::text[]) AS x(bioguide_id)
+ON CONFLICT (bioguide_id) DO NOTHING
+"""
+
+# Batch upsert for vote members using UNNEST arrays
+HOUSE_VOTE_MEMBERS_UPSERT_BATCH = """
 INSERT INTO house_vote_members AS hvm
   (congress, session, roll, chamber, bioguide_id, vote_state, vote_party, position)
-VALUES
-  ($1,$2,$3,'House',$4,$5,$6,$7)
+SELECT
+  $1::int,
+  $2::int,
+  $3::int,
+  'House',
+  u.bioguide_id,
+  u.vote_state,
+  u.vote_party,
+  u.position
+FROM UNNEST($4::text[], $5::text[], $6::text[], $7::text[]) AS u(bioguide_id, vote_state, vote_party, position)
 ON CONFLICT (congress, session, roll, bioguide_id) DO UPDATE SET
   vote_state = EXCLUDED.vote_state,
   vote_party = EXCLUDED.vote_party,
   position   = EXCLUDED.position
-"""
-
-MEMBERS_UPSERT = """
-INSERT INTO members AS m
-  (bioguide_id, name, party, state, image_url, updated_at)
-VALUES
-  ($1,$2,$3,$4,NULL, now())
-ON CONFLICT (bioguide_id) DO UPDATE SET
-  name       = COALESCE(EXCLUDED.name, m.name),
-  party      = COALESCE(EXCLUDED.party, m.party),
-  state      = COALESCE(EXCLUDED.state, m.state),
-  updated_at = now()
 """
 
 MEMBER_PROFILE_UPDATE = """
@@ -264,7 +224,7 @@ GET_CHECKPOINT = "SELECT last_offset FROM ingestion_checkpoints WHERE feed=$1"
 
 # ======================== Advisory locks ========================
 
-_async_locks = {}  # process-local locks
+_async_locks = {}
 
 def _bill_lock_key(congress: int, bill_type: str, bill_number: str) -> int:
     s = f"bill:{congress}:{bill_type.lower()}:{bill_number}"
@@ -380,8 +340,10 @@ async def backfill_missing_bills(pool: asyncpg.Pool, client: httpx.AsyncClient) 
             async with conn.transaction():
                 lock = await acquire_bill_locks(conn, key)
                 try:
-                    await conn.execute(BILLS_UPSERT, c, bt, bn, title, introduced_dt,
-                                       json.dumps(latest) if latest else None, public_url)
+                    await conn.execute(
+                        BILLS_UPSERT, c, bt, bn, title, introduced_dt,
+                        json.dumps(latest) if latest else None, public_url
+                    )
                     for vt, url in text_versions:
                         await conn.execute(BILL_TEXT_VERSIONS_UPSERT, c, bt, bn, vt, url)
                         tv_count += 1
@@ -398,7 +360,6 @@ async def enrich_missing_member_images(
     limit: int = 1000,
     workers: int = 6,
 ):
-    """Fetch Congress member profiles to populate image_url (and fill missing name/party/state)."""
     if not API_KEY:
         print("Skip image enrichment: CONGRESS_API_KEY missing.")
         return
@@ -448,7 +409,8 @@ async def enrich_missing_member_images(
             async with pool.acquire() as conn:
                 await conn.execute(MEMBER_PROFILE_UPDATE, bioguide, name, party, state, image)
             done += 1
-            print(f"[{done}/{total}] updated {bioguide}")
+            if done % 25 == 0 or done == total:
+                print(f"[members] updated {done}/{total}")
 
     await asyncio.gather(*(worker(r["bioguide_id"]) for r in todo))
     print(f"Member image enrichment complete: {done} updated.")
@@ -458,25 +420,22 @@ async def enrich_missing_member_images(
 async def ingest_roll(pool: asyncpg.Pool, client: httpx.AsyncClient, congress: int, session: int, rb: dict, *, force_members=False):
     roll = rb.get("rollCallNumber")
     if roll is None:
-        return
+        return set()
 
     question = rb.get("voteQuestion") or None
     legislation_url = rb.get("legislationUrl") or None
     t = (rb.get("legislationType") or "").strip()
     n = (str(rb.get("legislationNumber") or "")).strip()
-    
-    # Initialize subject bill fields
+
     subject_t = None
     subject_n = None
 
-    # Step 1: Try parsing from question text if API didn't provide bill info
     if not t or not n:
         t_parsed, n_parsed = parse_bill_from_question(question or "")
         if t_parsed and n_parsed:
             t, n = t_parsed, n_parsed
             print(f"[parsed from question] roll #{roll}: {t} {n}")
 
-    # Step 2: Check hardcoded mappings for truly ambiguous cases
     if not t or not n:
         mapping_key = (congress, session, roll)
         if mapping_key in PROCEDURAL_VOTE_MAPPINGS:
@@ -487,7 +446,6 @@ async def ingest_roll(pool: asyncpg.Pool, client: httpx.AsyncClient, congress: i
                 t, n = mapping
             print(f"[hardcoded mapping] roll #{roll}: {t} {n}")
 
-    # Step 3: If this is an HRES, try to extract the subject bill
     if t and t.upper() == "HRES" and n and not subject_t:
         subject_t, subject_n = await parse_subject_bill_from_hres(client, congress, n)
         if subject_t and subject_n:
@@ -501,9 +459,12 @@ async def ingest_roll(pool: asyncpg.Pool, client: httpx.AsyncClient, congress: i
         except Exception:
             started_ts = None
 
-    # Parent upsert (counts unknown yet)
+    # Upsert parent record early
     async with pool.acquire() as conn:
+        await conn.execute("SET search_path = public, extensions")
         async with conn.transaction():
+            # Optional: raise statement timeout a bit for this connection if your DB allows it
+            # await conn.execute("SET statement_timeout TO '60s';")
             await conn.execute(
                 HOUSE_VOTES_UPSERT,
                 congress, session, roll,
@@ -514,13 +475,12 @@ async def ingest_roll(pool: asyncpg.Pool, client: httpx.AsyncClient, congress: i
                 None, None, None, None
             )
 
-            # Skip members fetch if we already have ballots
             already_have = False
             if not force_members:
                 exists = await conn.fetchval(CHECK_BALLOTS_EXIST, congress, session, roll)
                 already_have = exists is not None
 
-    rows = []
+    rows: List[Dict] = []
     if not already_have or not question or not legislation_url or not t or not n:
         try:
             block = await fetch_members_for_roll(client, congress, session, roll)
@@ -535,34 +495,49 @@ async def ingest_roll(pool: asyncpg.Pool, client: httpx.AsyncClient, congress: i
                 n = (str(block.get("legislationNumber") or "")).strip()
             rows = block.get("results") or []
 
-    # Upsert ballots + minimal members + counts
-    touched_bioguide_ids = set()
+    touched_bioguide_ids: set[str] = set()
     yea = nay = present = nv = None
+
     if rows:
         rows.sort(key=lambda m: (m.get("bioguideID") or ""))
+
+        # counts
         yea     = sum(1 for m in rows if normalize_position(m.get("voteCast")) == "Yea")
         nay     = sum(1 for m in rows if normalize_position(m.get("voteCast")) == "Nay")
         present = sum(1 for m in rows if normalize_position(m.get("voteCast")) == "Present")
         nv      = sum(1 for m in rows if normalize_position(m.get("voteCast")) == "Not Voting")
 
+        bioguide_ids: List[str] = []
+        vote_states: List[str] = []
+        vote_parties: List[str] = []
+        positions: List[str] = []
+
+        for m in rows:
+            bioguide = (m.get("bioguideID") or "").upper()
+            if not bioguide:
+                continue
+            touched_bioguide_ids.add(bioguide)
+            bioguide_ids.append(bioguide)
+            vote_states.append((m.get("voteState") or "")[:2] if m.get("voteState") else None)
+            vote_parties.append((m.get("voteParty") or "") if m.get("voteParty") else None)
+            positions.append(normalize_position(m.get("voteCast")))
+
+        # 1) Ensure member rows exist (cheap DO NOTHING)
+        # 2) Batch upsert vote members (single statement)
         async with pool.acquire() as conn:
+            await conn.execute("SET search_path = public, extensions")
             async with conn.transaction():
-                for m in rows:
-                    bioguide = (m.get("bioguideID") or "").upper()
-                    touched_bioguide_ids.add(bioguide)
-                    first = (m.get("firstName") or "").strip()
-                    last  = (m.get("lastName") or "").strip()
-                    name  = f"{first} {last}".strip() or None
-                    await conn.execute(MEMBERS_UPSERT, bioguide, name, m.get("voteParty"), m.get("voteState"))
+                if bioguide_ids:
+                    await conn.execute(ENSURE_MEMBERS_EXIST, bioguide_ids)
                     await conn.execute(
-                        HOUSE_VOTE_MEMBERS_UPSERT,
+                        HOUSE_VOTE_MEMBERS_UPSERT_BATCH,
                         congress, session, roll,
-                        bioguide, m.get("voteState"), m.get("voteParty"),
-                        normalize_position(m.get("voteCast")),
+                        bioguide_ids, vote_states, vote_parties, positions
                     )
 
     # Update parent with final counts & improved fields
     async with pool.acquire() as conn:
+        await conn.execute("SET search_path = public, extensions")
         async with conn.transaction():
             await conn.execute(
                 HOUSE_VOTES_UPSERT,
@@ -574,10 +549,11 @@ async def ingest_roll(pool: asyncpg.Pool, client: httpx.AsyncClient, congress: i
                 yea, nay, present, nv
             )
 
-    # Bill header + text versions (write stub even if API fails)
+    # Bill header + text versions
     if t and n:
         key = _bill_lock_key(congress, t, n)
         async with pool.acquire() as conn:
+            await conn.execute("SET search_path = public, extensions")
             async with conn.transaction():
                 lock = await acquire_bill_locks(conn, key)
                 try:
@@ -622,19 +598,21 @@ async def run_update(congress: int, session: int, *, limit_recent=300, workers=1
         raise SystemExit("Missing CONGRESS_API_KEY or DATABASE_URL")
 
     pool = await asyncpg.create_pool(
-        DATABASE_URL, 
-        min_size=1, 
+        DATABASE_URL,
+        min_size=1,
         max_size=10,
         server_settings={'search_path': 'public,extensions'}
     )
-    timeout = httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=10.0)
+    timeout = httpx.Timeout(connect=10.0, read=20.0, write=10.0, pool=10.0)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         if reset_all:
             await reset_db(pool)
 
         votes = await fetch_vote_list(client, congress, session, limit=limit_recent, offset=0)
-        total = len([v for v in votes if v.get("rollCallNumber") is not None])
+        votes = [v for v in votes if v.get("rollCallNumber") is not None]
+        total = len(votes)
         print(f"Update: found {total} recent rolls.")
+
         sem = asyncio.Semaphore(max(1, workers))
         idx = 0
         touched: set[str] = set()
@@ -648,7 +626,7 @@ async def run_update(congress: int, session: int, *, limit_recent=300, workers=1
                 ids = await ingest_roll(pool, client, congress, session, rb, force_members=False)
                 touched |= (ids or set())
 
-        await asyncio.gather(*(worker(rb) for rb in votes if rb.get("rollCallNumber") is not None))
+        await asyncio.gather(*(worker(rb) for rb in votes))
 
         if backfill_bills or backfill_texts:
             filled, tvs = await backfill_missing_bills(pool, client)
@@ -656,7 +634,6 @@ async def run_update(congress: int, session: int, *, limit_recent=300, workers=1
                 print(f"Backfill: inserted/updated {filled} bills; added {tvs} text versions.")
 
         if enrich_member_images:
-            # Prefer enriching recently-touched IDs; if none, fall back to global nulls
             only_ids = touched if touched else None
             await enrich_missing_member_images(pool, client, only_ids=only_ids, limit=enrich_limit, workers=6)
 
@@ -670,12 +647,12 @@ async def run_full(congress: int, session: int, *, batch_size=200, workers=1,
 
     feed = f"house-vote-{congress}-{session}"
     pool = await asyncpg.create_pool(
-        DATABASE_URL, 
-        min_size=1, 
+        DATABASE_URL,
+        min_size=1,
         max_size=10,
         server_settings={'search_path': 'public,extensions'}
     )
-    timeout = httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=10.0)
+    timeout = httpx.Timeout(connect=10.0, read=20.0, write=10.0, pool=10.0)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         if reset_all:
             await reset_db(pool)
@@ -734,49 +711,45 @@ async def run_full(congress: int, session: int, *, batch_size=200, workers=1,
 # ============================ CLI ============================
 
 def main():
-    ap = argparse.ArgumentParser(description="Ingest House roll-call votes into Postgres.")
+    ap = argparse.ArgumentParser(description="Ingest House roll-call votes into Postgres (optimized).")
     ap.add_argument("--congress", type=int, required=True)
     ap.add_argument("--session", type=int, required=True, choices=[1, 2])
-    ap.add_argument("--mode", choices=["update", "full"], default="update",
-                    help="'update' = refresh latest N votes; 'full' = walk all with offset+checkpoint")
-    ap.add_argument("--limit-recent", type=int, default=300, help="update mode: how many recent votes to scan")
-    ap.add_argument("--batch-size", type=int, default=200, help="full mode: page size for offset loop")
-    ap.add_argument("--workers", type=int, default=1, help="max concurrent rolls to ingest (start with 1)")
+    ap.add_argument("--mode", choices=["update", "full"], default="update")
+    ap.add_argument("--limit-recent", type=int, default=300)
+    ap.add_argument("--batch-size", type=int, default=200)
+    ap.add_argument("--workers", type=int, default=1)
 
-    # quality-of-life
-    ap.add_argument("--reset-all", action="store_true",
-                    help="TRUNCATE all tables before ingest (and clear checkpoint for 'full').")
-    ap.add_argument("--no-backfill-bills", dest="backfill_bills", action="store_false",
-                    help="Skip post-ingest bill backfill.")
-    ap.add_argument("--no-backfill-texts", dest="backfill_texts", action="store_false",
-                    help="Skip post-ingest text-versions backfill.")
+    ap.add_argument("--reset-all", action="store_true")
+    ap.add_argument("--no-backfill-bills", dest="backfill_bills", action="store_false")
+    ap.add_argument("--no-backfill-texts", dest="backfill_texts", action="store_false")
 
-    # NEW: member image enrichment
-    ap.add_argument("--no-enrich-member-images", dest="enrich_member_images", action="store_false",
-                    help="Skip enriching member image_url via Congress member endpoint.")
-    ap.add_argument("--enrich-limit", type=int, default=1000,
-                    help="Max members to enrich per run/batch (default 1000).")
+    ap.add_argument("--no-enrich-member-images", dest="enrich_member_images", action="store_false")
+    ap.add_argument("--enrich-limit", type=int, default=1000)
 
     args = ap.parse_args()
 
     if args.mode == "update":
-        asyncio.run(run_update(args.congress, args.session,
-                               limit_recent=args.limit_recent,
-                               workers=max(1, args.workers),
-                               reset_all=args.reset_all,
-                               backfill_bills=args.backfill_bills,
-                               backfill_texts=args.backfill_texts,
-                               enrich_member_images=args.enrich_member_images,
-                               enrich_limit=args.enrich_limit))
+        asyncio.run(run_update(
+            args.congress, args.session,
+            limit_recent=args.limit_recent,
+            workers=max(1, args.workers),
+            reset_all=args.reset_all,
+            backfill_bills=args.backfill_bills,
+            backfill_texts=args.backfill_texts,
+            enrich_member_images=args.enrich_member_images,
+            enrich_limit=args.enrich_limit
+        ))
     else:
-        asyncio.run(run_full(args.congress, args.session,
-                             batch_size=args.batch_size,
-                             workers=max(1, args.workers),
-                             reset_all=args.reset_all,
-                             backfill_bills=args.backfill_bills,
-                             backfill_texts=args.backfill_texts,
-                             enrich_member_images=args.enrich_member_images,
-                             enrich_limit=args.enrich_limit))
+        asyncio.run(run_full(
+            args.congress, args.session,
+            batch_size=args.batch_size,
+            workers=max(1, args.workers),
+            reset_all=args.reset_all,
+            backfill_bills=args.backfill_bills,
+            backfill_texts=args.backfill_texts,
+            enrich_member_images=args.enrich_member_images,
+            enrich_limit=args.enrich_limit
+        ))
 
 if __name__ == "__main__":
     main()
