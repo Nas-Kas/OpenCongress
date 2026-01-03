@@ -44,8 +44,16 @@ class MemberRepository:
                 JOIN house_votes hv
                   ON hv.congress=hvm.congress AND hv.session=hvm.session AND hv.roll=hvm.roll
                 LEFT JOIN bills b
-                  ON b.congress=hv.congress AND b.bill_type=LOWER(hv.legislation_type) 
-                  AND b.bill_number=hv.legislation_number
+                  ON b.congress=hv.congress 
+                  AND (
+                    (LOWER(b.bill_type) = LOWER(hv.legislation_type)
+                     AND b.bill_number::text = hv.legislation_number::text)
+                    OR
+                    (hv.subject_bill_type IS NOT NULL
+                     AND hv.subject_bill_number IS NOT NULL
+                     AND LOWER(b.bill_type) = LOWER(hv.subject_bill_type)
+                     AND b.bill_number::text = hv.subject_bill_number::text)
+                  )
                 WHERE hvm.bioguide_id=$1 AND hv.congress=$2 AND hv.session=$3
                 ORDER BY hv.started DESC NULLS LAST, hvm.roll DESC
                 LIMIT $4 OFFSET $5

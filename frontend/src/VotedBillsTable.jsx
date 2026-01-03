@@ -82,7 +82,7 @@ export default function VotedBillsTable({
     setErr(null);
     setData(null);
     fetch(
-      `${API_URL}/house/votes?congress=${congress}&session=${session}&window=200`,
+      `${API_URL}/house/votes?congress=${congress}&session=${session}&limit=200`,
       { signal: ctrl.signal }
     )
       .then((r) => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); })
