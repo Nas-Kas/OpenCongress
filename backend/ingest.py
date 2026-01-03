@@ -301,8 +301,15 @@ async def backfill_missing_bills(pool: asyncpg.Pool, client: httpx.AsyncClient) 
           FROM house_votes hv
           LEFT JOIN bills b
             ON b.congress   = hv.congress
-           AND b.bill_type  = LOWER(hv.legislation_type)
-           AND b.bill_number= hv.legislation_number
+           AND (
+             (LOWER(b.bill_type) = LOWER(hv.legislation_type)
+              AND b.bill_number::text = hv.legislation_number::text)
+             OR
+             (hv.subject_bill_type IS NOT NULL
+              AND hv.subject_bill_number IS NOT NULL
+              AND LOWER(b.bill_type) = LOWER(hv.subject_bill_type)
+              AND b.bill_number::text = hv.subject_bill_number::text)
+           )
           WHERE hv.legislation_type IS NOT NULL
             AND hv.legislation_number IS NOT NULL
             AND b.congress IS NULL
@@ -463,8 +470,6 @@ async def ingest_roll(pool: asyncpg.Pool, client: httpx.AsyncClient, congress: i
     async with pool.acquire() as conn:
         await conn.execute("SET search_path = public, extensions")
         async with conn.transaction():
-            # Optional: raise statement timeout a bit for this connection if your DB allows it
-            # await conn.execute("SET statement_timeout TO '60s';")
             await conn.execute(
                 HOUSE_VOTES_UPSERT,
                 congress, session, roll,
@@ -522,8 +527,6 @@ async def ingest_roll(pool: asyncpg.Pool, client: httpx.AsyncClient, congress: i
             vote_parties.append((m.get("voteParty") or "") if m.get("voteParty") else None)
             positions.append(normalize_position(m.get("voteCast")))
 
-        # 1) Ensure member rows exist (cheap DO NOTHING)
-        # 2) Batch upsert vote members (single statement)
         async with pool.acquire() as conn:
             await conn.execute("SET search_path = public, extensions")
             async with conn.transaction():
