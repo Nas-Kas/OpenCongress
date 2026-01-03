@@ -1,5 +1,6 @@
 """Member-related API endpoints."""
 from fastapi import APIRouter, Query, HTTPException, Depends
+from typing import Optional
 import asyncpg
 
 from services.member_service import MemberService
@@ -32,8 +33,9 @@ async def get_member_house_votes(
     bioguideId: str,
     congress: int = Query(..., description="e.g., 119 or 118"),
     session: int = Query(1, description="1 or 2"),
-    window: int = Query(150, ge=1, le=500, description="how many recent roll calls to scan"),
+    limit: int = Query(150, ge=1, le=500, description="how many recent roll calls to return"),
     offset: int = 0,
+    search: Optional[str] = Query(None, description="Search bill titles, numbers, or roll numbers"),
     pool: asyncpg.Pool = Depends(get_db_pool)
 ):
     """Get member's recent House votes with statistics."""
@@ -41,7 +43,7 @@ async def get_member_house_votes(
     member_service = MemberService(member_repo)
     
     result = await member_service.get_member_voting_history(
-        bioguideId, congress, session, window, offset
+        bioguideId, congress, session, limit, offset, search
     )
     
     # If no votes found in requested congress, search for their most recent votes

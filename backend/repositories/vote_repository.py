@@ -15,9 +15,10 @@ class VoteRepository:
         session: Optional[int] = None,
         limit: int = 50,
         offset: int = 0,
-        include_titles: bool = True
+        include_titles: bool = True,
+        search: Optional[str] = None,
     ) -> List[dict]:
-        """Get votes for a congress/session with optional bill titles."""
+        """Get votes for a congress/session with optional bill titles and optional server-side search."""
         async with self.pool.acquire() as conn:
             if session is None:
                 rows = await conn.fetch(
@@ -42,10 +43,21 @@ class VoteRepository:
                         AND b.bill_number::text = hv.subject_bill_number::text)
                      )
                     WHERE hv.congress = $2
+                      AND (
+                        $5::text IS NULL OR $5::text = '' OR
+                        b.title ILIKE '%' || $5::text || '%' OR
+                        hv.legislation_number::text ILIKE '%' || $5::text || '%' OR
+                        hv.roll::text = $5::text OR
+                        hv.question ILIKE '%' || $5::text || '%'
+                      )
                     ORDER BY hv.started DESC NULLS LAST, hv.roll DESC
                     LIMIT $3 OFFSET $4
                     """,
-                    include_titles, congress, limit, offset
+                    include_titles,
+                    congress,
+                    limit,
+                    offset,
+                    search,
                 )
             else:
                 rows = await conn.fetch(
@@ -70,34 +82,49 @@ class VoteRepository:
                         AND b.bill_number::text = hv.subject_bill_number::text)
                      )
                     WHERE hv.congress = $2 AND hv.session = $3
+                      AND (
+                        $6::text IS NULL OR $6::text = '' OR
+                        b.title ILIKE '%' || $6::text || '%' OR
+                        hv.legislation_number::text ILIKE '%' || $6::text || '%' OR
+                        hv.roll::text = $6::text OR
+                        hv.question ILIKE '%' || $6::text || '%'
+                      )
                     ORDER BY hv.started DESC NULLS LAST, hv.roll DESC
                     LIMIT $4 OFFSET $5
                     """,
-                    include_titles, congress, session, limit, offset
+                    include_titles,
+                    congress,
+                    session,
+                    limit,
+                    offset,
+                    search,
                 )
+
         return [dict(r) for r in rows]
-    
+
     async def get_vote_detail(
         self,
         congress: int,
         session: int,
-        roll: int
+        roll: int,
     ) -> Optional[dict]:
         """Get detailed vote information including metadata."""
         async with self.pool.acquire() as conn:
             hv = await conn.fetchrow(
                 "SELECT * FROM house_votes WHERE congress=$1 AND session=$2 AND roll=$3",
-                congress, session, roll
+                congress,
+                session,
+                roll,
             )
             if hv:
                 return dict(hv)
         return None
-    
+
     async def get_vote_members(
         self,
         congress: int,
         session: int,
-        roll: int
+        roll: int,
     ) -> List[dict]:
         """Get all member votes for a specific roll call."""
         async with self.pool.acquire() as conn:
@@ -113,15 +140,17 @@ class VoteRepository:
                 WHERE hvm.congress=$1 AND hvm.session=$2 AND hvm.roll=$3
                 ORDER BY name ASC, hvm.bioguide_id ASC
                 """,
-                congress, session, roll
+                congress,
+                session,
+                roll,
             )
         return [dict(b) for b in ballots]
-    
+
     async def check_ballots_exist(
         self,
         congress: int,
         session: int,
-        roll: int
+        roll: int,
     ) -> bool:
         """Check if ballots exist for a vote."""
         async with self.pool.acquire() as conn:
@@ -132,6 +161,8 @@ class VoteRepository:
                 WHERE congress=$1 AND session=$2 AND roll=$3
                 LIMIT 1
                 """,
-                congress, session, roll
+                congress,
+                session,
+                roll,
             )
         return exists is not None

@@ -16,11 +16,12 @@ class VoteService:
         session: Optional[int] = None,
         limit: int = 50,
         offset: int = 0,
-        include_titles: bool = True
+        include_titles: bool = True,
+        search: Optional[str] = None
     ) -> List[dict]:
         """Get formatted list of votes."""
         rows = await self.vote_repo.get_votes_by_congress(
-            congress, session, limit, offset, include_titles
+            congress, session, limit, offset, include_titles, search
         )
         
         return [{

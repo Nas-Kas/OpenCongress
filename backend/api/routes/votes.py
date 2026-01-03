@@ -19,6 +19,7 @@ async def list_house_votes(
     session: Optional[int] = Query(None, description="e.g., 1 or 2"),
     limit: int = 50,
     offset: int = 0,
+    search: Optional[str] = Query(None, description="Search bill titles, numbers, or roll numbers"),
     include_titles: bool = Query(True, description="Join bill titles from DB"),
     include_questions: bool = Query(True, description="(kept for compat; DB already has questions)"),
     pool: asyncpg.Pool = Depends(get_db_pool),
@@ -31,7 +32,7 @@ async def list_house_votes(
     vote_service = VoteService(vote_repo)
     
     votes = await vote_service.list_votes(
-        congress, session, limit, offset, include_titles
+        congress, session, limit, offset, include_titles, search
     )
     
     # TODO: Add API fallback if votes is empty and FALLBACK_TO_API is enabled

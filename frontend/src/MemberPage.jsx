@@ -201,14 +201,28 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
 
   const [open, setOpen] = useState(() => new Set()); // group expand/collapse
 
+  // Fetch member votes with server-side search
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
     setErr(null);
     setData(null);
 
+    // Build query parameters
+    const params = new URLSearchParams({
+      congress: congress.toString(),
+      session: session.toString(),
+      limit: '200',
+      offset: '0'
+    });
+    
+    // Add search parameter if provided
+    if (q.trim()) {
+      params.set('search', q.trim());
+    }
+
     fetch(
-      `${API_URL}/member/${bioguideId}/house-votes?congress=${congress}&session=${session}&window=200`,
+      `${API_URL}/member/${bioguideId}/house-votes?${params.toString()}`,
       { signal: ctrl.signal }
     )
       .then((r) => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); })
@@ -217,7 +231,7 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
       .finally(() => setLoading(false));
 
     return () => ctrl.abort();
-  }, [bioguideId, congress, session]);
+  }, [bioguideId, congress, session, q]); // Added q to dependencies for server-side search
 
   const votes = useMemo(() => data?.votes ?? [], [data]);
 
@@ -227,28 +241,20 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
     return Array.from(s);
   }, [votes]);
 
+  // Client-side filtering for non-search filters (position, result, type, dates)
   const filtered = useMemo(() => {
     let list = votes;
-    if (q.trim()) {
-      const needle = q.toLowerCase();
-      list = list.filter(
-        (v) =>
-          (v.title || "").toLowerCase().includes(needle) ||
-          (v.question || "").toLowerCase().includes(needle)
-      );
-    }
+    
+    // Note: Search is now handled server-side, so we don't filter by q here
     if (fPos !== "all") list = list.filter((v) => v.position === fPos);
     if (fRes !== "all") list = list.filter((v) => classifyResult(v.result) === fRes);
     if (fType !== "all") list = list.filter((v) => (v.legislationType || "") === fType);
     if (from) list = list.filter((v) => (v.started || "").slice(0, 10) >= from);
     if (to) list = list.filter((v) => (v.started || "").slice(0, 10) <= to);
 
-    // newest first (per-vote)
-    list = [...list].sort((a, b) =>
-      String(b.started || "").localeCompare(String(a.started || ""))
-    );
+    // Server already sorts by date DESC, so we maintain that order
     return list;
-  }, [votes, q, fPos, fRes, fType, from, to]);
+  }, [votes, fPos, fRes, fType, from, to]); // Removed q from dependencies
 
   // === GROUP BY BILL (same logic as VotedBillsTable) ===
   const groups = useMemo(() => {

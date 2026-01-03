@@ -17,7 +17,7 @@ export default function BillsWithoutVotes({ onSelectBill }) {
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Load bills from API
+  // Load bills from API with server-side search and filtering
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
@@ -25,8 +25,17 @@ export default function BillsWithoutVotes({ onSelectBill }) {
 
     const params = new URLSearchParams({
       congress: congress.toString(),
-      limit: "500" // Load more for client-side filtering
+      limit: "200", // Reduced since we're using server-side filtering
+      offset: "0"
     });
+
+    // Add server-side filters
+    if (searchQuery.trim()) {
+      params.set('search', searchQuery.trim());
+    }
+    if (billType !== "all") {
+      params.set('bill_type', billType.toLowerCase());
+    }
 
     fetch(`${API_URL}/bills/no-votes?${params}`, { signal: ctrl.signal })
       .then((r) => {
@@ -40,7 +49,7 @@ export default function BillsWithoutVotes({ onSelectBill }) {
       .finally(() => setLoading(false));
 
     return () => ctrl.abort();
-  }, [congress]);
+  }, [congress, searchQuery, billType]); // Added search and billType to dependencies
 
   // Get unique bill types from loaded bills
   const uniqueTypes = useMemo(() => {
@@ -51,27 +60,13 @@ export default function BillsWithoutVotes({ onSelectBill }) {
     return Array.from(types).sort();
   }, [bills]);
 
-  // Client-side filtering
+  // Client-side filtering for date filters only (search and bill type are server-side)
   const filtered = useMemo(() => {
     let list = bills;
 
-    // Search filter
-    if (searchQuery.trim()) {
-      const needle = searchQuery.toLowerCase();
-      list = list.filter(
-        (b) =>
-          (b.billNumber || "").toLowerCase().includes(needle) ||
-          (b.title || "").toLowerCase().includes(needle) ||
-          (b.billType || "").toLowerCase().includes(needle)
-      );
-    }
-
-    // Bill type filter
-    if (billType !== "all") {
-      list = list.filter((b) => (b.billType || "").toUpperCase() === billType.toUpperCase());
-    }
-
-    // Date filters
+    // Note: Search and bill type filtering are now handled server-side
+    
+    // Date filters (still client-side for now)
     if (fromDate) {
       list = list.filter((b) => (b.introducedDate || "") >= fromDate);
     }
@@ -79,11 +74,9 @@ export default function BillsWithoutVotes({ onSelectBill }) {
       list = list.filter((b) => (b.introducedDate || "") <= toDate);
     }
 
-    // Sort by most recent
-    return [...list].sort((a, b) =>
-      String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))
-    );
-  }, [bills, searchQuery, billType, fromDate, toDate]);
+    // Server already sorts appropriately, maintain that order
+    return list;
+  }, [bills, fromDate, toDate]); // Removed searchQuery and billType from dependencies
 
   // Pagination
   const paginatedBills = useMemo(() => {

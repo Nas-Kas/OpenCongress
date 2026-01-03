@@ -25,7 +25,8 @@ class MemberRepository:
         congress: int,
         session: int,
         limit: int = 150,
-        offset: int = 0
+        offset: int = 0,
+        search: Optional[str] = None
     ) -> List[dict]:
         """Get member's voting history with bill details."""
         async with self.pool.acquire() as conn:
@@ -55,10 +56,17 @@ class MemberRepository:
                      AND b.bill_number::text = hv.subject_bill_number::text)
                   )
                 WHERE hvm.bioguide_id=$1 AND hv.congress=$2 AND hv.session=$3
+                  AND (
+                    $6 IS NULL OR $6 = '' OR
+                    b.title ILIKE '%' || $6 || '%' OR
+                    hv.legislation_number::text ILIKE '%' || $6 || '%' OR
+                    hv.roll::text = $6 OR
+                    hv.question ILIKE '%' || $6 || '%'
+                  )
                 ORDER BY hv.started DESC NULLS LAST, hvm.roll DESC
                 LIMIT $4 OFFSET $5
                 """,
-                bioguide_id.upper(), congress, session, limit, offset
+                bioguide_id.upper(), congress, session, limit, offset, search
             )
         return [dict(r) for r in rows]
     

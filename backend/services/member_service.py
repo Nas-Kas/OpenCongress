@@ -29,13 +29,14 @@ class MemberService:
         bioguide_id: str,
         congress: int,
         session: int,
-        window: int = 150,
-        offset: int = 0
+        limit: int = 150,
+        offset: int = 0,
+        search: Optional[str] = None
     ) -> dict:
         """Get member's voting history with statistics."""
         profile = await self.member_repo.get_member_by_bioguide(bioguide_id)
         votes = await self.member_repo.get_member_votes(
-            bioguide_id, congress, session, window, offset
+            bioguide_id, congress, session, limit, offset, search
         )
         
         # Format votes
@@ -83,7 +84,8 @@ class MemberService:
             "profile": profile_out,
             "congress": congress,
             "session": session,
-            "window": window,
+            "limit": limit,
+            "offset": offset,
             "stats": stats,
             "votes": votes_out,
         }

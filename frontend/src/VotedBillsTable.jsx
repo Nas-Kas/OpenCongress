@@ -4,9 +4,6 @@ import BillLabel from "./components/BillLabel";
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
-
-
-
 function classifyResult(result) {
   const s = (result || "").toLowerCase();
   if (s.includes("pass") || s.includes("agreed")) return "passed";
@@ -76,13 +73,28 @@ export default function VotedBillsTable({
 
   const [open, setOpen] = useState(() => new Set());
 
+  // Fetch data with server-side search and filtering
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
     setErr(null);
     setData(null);
+    
+    // Build query parameters
+    const params = new URLSearchParams({
+      congress: congress.toString(),
+      session: session.toString(),
+      limit: '200',
+      offset: '0'
+    });
+    
+    // Add search parameter if provided
+    if (q.trim()) {
+      params.set('search', q.trim());
+    }
+    
     fetch(
-      `${API_URL}/house/votes?congress=${congress}&session=${session}&limit=200`,
+      `${API_URL}/house/votes?${params.toString()}`,
       { signal: ctrl.signal }
     )
       .then((r) => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); })
@@ -90,7 +102,7 @@ export default function VotedBillsTable({
       .catch((e) => { if (e.name !== "AbortError") setErr(String(e)); })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [congress, session]);
+  }, [congress, session, q]); // Added q to dependencies for server-side search
 
   const votes = useMemo(() => data?.votes ?? [], [data]);
 
@@ -100,29 +112,19 @@ export default function VotedBillsTable({
     return Array.from(s);
   }, [votes]);
 
+  // Client-side filtering for non-search filters (result, type, dates)
   const filtered = useMemo(() => {
     let list = votes;
 
-    if (q.trim()) {
-      const needle = q.toLowerCase();
-      list = list.filter(
-        (v) =>
-          (v.title || "").toLowerCase().includes(needle) ||
-          (v.question || "").toLowerCase().includes(needle) ||
-          (v.legislationType || "").toLowerCase().includes(needle) ||
-          String(v.legislationNumber || "").includes(needle)
-      );
-    }
+    // Note: Search is now handled server-side, so we don't filter by q here
     if (fRes !== "all") list = list.filter((v) => classifyResult(v.result) === fRes);
     if (fType !== "all") list = list.filter((v) => (v.legislationType || "") === fType);
     if (from) list = list.filter((v) => (v.started || "").slice(0, 10) >= from);
     if (to) list = list.filter((v) => (v.started || "").slice(0, 10) <= to);
 
-    list = [...list].sort((a, b) =>
-      String(b.started || "").localeCompare(String(a.started || ""))
-    );
+    // Server already sorts by date DESC, so we maintain that order
     return list;
-  }, [votes, q, fRes, fType, from, to]);
+  }, [votes, fRes, fType, from, to]); // Removed q from dependencies
 
   const allGroups = useMemo(() => {
     const map = new Map();
@@ -479,8 +481,3 @@ function DensityToggle({ value, onChange }) {
     </div>
   );
 }
-
-
-
-
-
