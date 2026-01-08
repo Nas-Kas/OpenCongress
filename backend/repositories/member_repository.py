@@ -57,11 +57,11 @@ class MemberRepository:
                   )
                 WHERE hvm.bioguide_id=$1 AND hv.congress=$2 AND hv.session=$3
                   AND (
-                    $6 IS NULL OR $6 = '' OR
-                    b.title ILIKE '%' || $6 || '%' OR
-                    hv.legislation_number::text ILIKE '%' || $6 || '%' OR
-                    hv.roll::text = $6 OR
-                    hv.question ILIKE '%' || $6 || '%'
+                    $6::text IS NULL OR $6::text = '' OR
+                    b.title ILIKE '%' || $6::text || '%' OR
+                    hv.legislation_number::text ILIKE '%' || $6::text || '%' OR
+                    hv.roll::text = $6::text OR
+                    hv.question ILIKE '%' || $6::text || '%'
                   )
                 ORDER BY hv.started DESC NULLS LAST, hvm.roll DESC
                 LIMIT $4 OFFSET $5
