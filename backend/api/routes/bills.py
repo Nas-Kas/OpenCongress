@@ -137,7 +137,8 @@ async def generate_bill_summary(
                 
                 response = dict(summary_data)
                 response["cached"] = True
-                response["cached_at"] = cached['created_at'].isoformat()
+                dt = cached.get('createdAt')
+                response["cached_at"] = dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)   
                 return response
         
         # Get text versions to find a PDF
