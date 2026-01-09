@@ -1,5 +1,6 @@
 """Database queries for bills with shared connection support and camelCase output."""
 import asyncpg
+import time
 from typing import Optional, List, Tuple
 
 class BillRepository:
@@ -94,6 +95,9 @@ class BillRepository:
             return await self._get_bills_without_votes_exec(new_conn, congress, bill_type, limit, offset, search)
 
     async def _get_bills_without_votes_exec(self, conn, congress, bill_type, limit, offset, search):
+        t0 = time.time()
+        print(f"[QUERY] get_bills_without_votes: congress={congress}, type={bill_type}, limit={limit}")
+        
         where_clause = "WHERE hv.congress IS NULL AND b.congress = $1"
         params = [congress]
         
@@ -138,8 +142,13 @@ class BillRepository:
             {where_clause}
         """
         
+        print(f"[QUERY] Fetching rows...")
         rows = await conn.fetch(query, *params, limit, offset)
+        print(f"[QUERY] Rows fetched in {time.time() - t0:.2f}s")
+        
+        print(f"[QUERY] Fetching count...")
         total = await conn.fetchval(count_query, *params)
+        print(f"[QUERY] Count completed in {time.time() - t0:.2f}s total")
         
         return [dict(r) for r in rows], (total or 0)
 
@@ -183,7 +192,6 @@ class BillRepository:
         """Saves or updates a bill summary in the database."""
         import json
         
-        # Convert dict to JSON string for Postgres jsonb/text column
         summary_json = json.dumps(summary_data)
         
         sql = """
