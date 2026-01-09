@@ -58,7 +58,7 @@ async def get_member_house_votes(
             fallback_session = most_recent[0]["session"]
             
             fallback_result = await member_service.get_member_voting_history(
-                bioguideId, fallback_congress, fallback_session, window, offset
+                bioguideId, fallback_congress, fallback_session, limit, offset, search
             )
             
             if fallback_result["votes"]:
