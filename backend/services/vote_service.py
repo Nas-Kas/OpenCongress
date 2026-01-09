@@ -35,14 +35,15 @@ class VoteService:
             "legislationNumber": r["legislation_number"],
             "subjectBillType": r["subject_bill_type"],
             "subjectBillNumber": r["subject_bill_number"],
-            "source": r["legislation_url"] or r["source"],
+            "source": r["source"],
+            "legislationUrl": r["legislation_url"] or r["source"], 
             "title": r["title"] if include_titles else None,
             "yeaCount": r["yea_count"],
             "nayCount": r["nay_count"],
             "presentCount": r["present_count"],
             "notVotingCount": r["not_voting_count"],
         } for r in rows]
-    
+
     async def get_vote_detail(
         self,
         congress: int,
@@ -56,7 +57,7 @@ class VoteService:
         
         ballots = await self.vote_repo.get_vote_members(congress, session, roll)
         
-        # Calculate counts from ballots
+        # Calculate counts from ballots if available, otherwise fallback to stored counts
         if ballots:
             counts = {
                 "total": len(ballots),
@@ -66,14 +67,13 @@ class VoteService:
                 "notVoting": sum(1 for b in ballots if normalize_position(b["position"]) == "Not Voting"),
             }
         else:
-            # Fallback to stored counts
             counts = {
-                "total": (hv["yea_count"] or 0) + (hv["nay_count"] or 0) + 
-                        (hv["present_count"] or 0) + (hv["not_voting_count"] or 0),
-                "yea": hv["yea_count"] or 0,
-                "nay": hv["nay_count"] or 0,
-                "present": hv["present_count"] or 0,
-                "notVoting": hv["not_voting_count"] or 0,
+                "total": (hv.get("yea_count") or 0) + (hv.get("nay_count") or 0) + 
+                         (hv.get("present_count") or 0) + (hv.get("not_voting_count") or 0),
+                "yea": hv.get("yea_count") or 0,
+                "nay": hv.get("nay_count") or 0,
+                "present": hv.get("present_count") or 0,
+                "notVoting": hv.get("not_voting_count") or 0,
             }
         
         # Format member votes
@@ -83,6 +83,7 @@ class VoteService:
             "state": b["state"],
             "party": b["party"],
             "position": normalize_position(b["position"]),
+            "imageUrl": b.get("image_url")
         } for b in ballots]
         
         meta = {
@@ -95,11 +96,12 @@ class VoteService:
             "question": hv["question"],
             "source": hv["source"],
             "legislationUrl": hv["legislation_url"] or hv["source"],
+            "started": to_iso(hv["started"]),
         }
         
         return {
             "meta": meta,
             "counts": counts,
             "votes": rows,
-            "bill": None  # Bill data would be fetched by bill_service
+            "bill": None 
         }

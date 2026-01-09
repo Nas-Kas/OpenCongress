@@ -1,28 +1,13 @@
-"""Business logic for member operations."""
+"""Business logic for member operations with optimized connection handling."""
 from typing import Optional, List
-from repositories.member_repository import MemberRepository
 from utils.formatters import normalize_position, to_iso
 
-
 class MemberService:
-    """Service layer for member-related operations."""
-    
-    def __init__(self, member_repo: MemberRepository):
+    def __init__(self, member_repo):
         self.member_repo = member_repo
     
     async def get_member_profile(self, bioguide_id: str) -> Optional[dict]:
-        """Get formatted member profile."""
-        member = await self.member_repo.get_member_by_bioguide(bioguide_id)
-        if not member:
-            return None
-        
-        return {
-            "bioguideId": member["bioguide_id"],
-            "name": member["name"] or bioguide_id,
-            "party": member["party"],
-            "state": member["state"],
-            "imageUrl": member["image_url"],
-        }
+        return await self.member_repo.get_member_by_bioguide(bioguide_id)
     
     async def get_member_voting_history(
         self,
@@ -33,36 +18,30 @@ class MemberService:
         offset: int = 0,
         search: Optional[str] = None
     ) -> dict:
-        """Get member's voting history with statistics."""
-        profile = await self.member_repo.get_member_by_bioguide(bioguide_id)
-        votes = await self.member_repo.get_member_votes(
-            bioguide_id, congress, session, limit, offset, search
-        )
+        """Fetch profile and votes using a single shared database connection."""
+        async with self.member_repo.pool.acquire() as conn:
+            # Fetch Profile
+            profile = await self.member_repo.get_member_by_bioguide(bioguide_id, conn=conn)
+            
+            # Fetch Votes
+            votes = await self.member_repo.get_member_votes(
+                bioguide_id, congress, session, limit, offset, search, conn=conn
+            )
         
-        # Format votes
-        votes_out = [{
-            "roll": v["roll"],
-            "legislationType": v["legislation_type"],
-            "legislationNumber": v["legislation_number"],
-            "subjectBillType": v["subject_bill_type"],
-            "subjectBillNumber": v["subject_bill_number"],
-            "title": v["title"],
-            "question": v["question"],
-            "result": v["result"],
-            "started": to_iso(v["started"]),
-            "position": normalize_position(v["position"]),
-            "partyAtVote": None,
-            "stateAtVote": None,
-            "legislationUrl": v["legislation_url"],
-            "counts": {
-                "yea": v["yea_count"] or 0,
-                "nay": v["nay_count"] or 0,
-                "present": v["present_count"] or 0,
-                "notVoting": v["not_voting_count"] or 0,
-            },
-        } for v in votes]
+        votes_out = []
+        for v in votes:
+            votes_out.append({
+                **v,
+                "started": to_iso(v["started"]),
+                "position": normalize_position(v["position"]),
+                "counts": {
+                    "yea": v["yeaCount"] or 0,
+                    "nay": v["nayCount"] or 0,
+                    "present": v["presentCount"] or 0,
+                    "notVoting": v["notVotingCount"] or 0,
+                }
+            })
         
-        # Calculate statistics
         stats = {
             "total": len(votes_out),
             "yea": sum(1 for v in votes_out if v["position"] == "Yea"),
@@ -71,17 +50,8 @@ class MemberService:
             "notVoting": sum(1 for v in votes_out if v["position"] == "Not Voting"),
         }
         
-        # Format profile
-        profile_out = {
-            "bioguideId": (profile["bioguide_id"] if profile else bioguide_id),
-            "name": (profile["name"] if profile else None) or bioguide_id,
-            "party": profile["party"] if profile else None,
-            "state": profile["state"] if profile else None,
-            "imageUrl": profile["image_url"] if profile else None,
-        }
-        
         return {
-            "profile": profile_out,
+            "profile": profile or {"bioguideId": bioguide_id, "name": bioguide_id},
             "congress": congress,
             "session": session,
             "limit": limit,
@@ -91,13 +61,4 @@ class MemberService:
         }
     
     async def search_members(self, query: str, limit: int = 10) -> List[dict]:
-        """Search for members."""
-        members = await self.member_repo.search_members(query, limit)
-        
-        return [{
-            "bioguideId": m["bioguide_id"],
-            "name": m["name"],
-            "party": m["party"],
-            "state": m["state"],
-            "imageUrl": m["image_url"],
-        } for m in members]
+        return await self.member_repo.search_members(query, limit)
