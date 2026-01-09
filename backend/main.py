@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     """
     print("--> Starting application lifespan...")
     try:
-        print(f"--> Connecting to database at {DATABASE_URL.split('@')[-1]}...") # Log host only for safety
+        print(f"--> Connecting to database at {DATABASE_URL.split('@')[-1]}...")
         
         app.state.pool = await asyncio.wait_for(
             asyncpg.create_pool(
@@ -40,6 +40,7 @@ async def lifespan(app: FastAPI):
                 min_size=1, 
                 max_size=5,
                 command_timeout=60,
+                statement_cache_size=0,
                 server_settings={'search_path': 'public,extensions'}
             ),
             timeout=10.0
@@ -47,7 +48,6 @@ async def lifespan(app: FastAPI):
         print("✓ Database connection pool initialized")
     except asyncio.TimeoutError:
         print("✗ CRITICAL: Database connection timed out after 10 seconds.")
-        # Raising an error here stops the deploy and shows a clear failure in Render
         raise RuntimeError("Database connection timeout during startup")
     except Exception as e:
         print(f"✗ CRITICAL: Database initialization failed: {e}")
