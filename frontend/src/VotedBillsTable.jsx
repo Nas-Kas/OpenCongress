@@ -149,7 +149,7 @@ export default function VotedBillsTable({
       if (!map.has(key)) {
         // Use title if available, otherwise use "TYPE NUMBER" format
         const displayTitle = title || (type && num ? `${type.toUpperCase()} ${num}` : "");
-        map.set(key, { key, billType: type || null, billNumber: num || null, title: displayTitle, votes: [] });
+        map.set(key, { key, billType: type || null, billNumber: num || null, billCongress: v.congress || congress, title: displayTitle, votes: [] });
       }
       map.get(key).votes.push(v);
     }
@@ -279,7 +279,7 @@ export default function VotedBillsTable({
                   {g.billType && g.billNumber ? (
                     <button
                       onClick={() => onSelectBill?.({
-                        congress,
+                        congress: g.billCongress,
                         billType: g.billType.toLowerCase(),
                         billNumber: g.billNumber,
                         title: g.title,

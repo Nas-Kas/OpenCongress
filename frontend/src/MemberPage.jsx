@@ -260,6 +260,7 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
   const groups = useMemo(() => {
     const map = new Map();
     for (const v of filtered) {
+      console.log('Vote object keys:', Object.keys(v), 'congress:', v.congress);
       let type = (v.legislationType || "").trim();
       let num = String(v.legislationNumber || "").trim();
       
@@ -281,6 +282,7 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
           key,
           billType: type || null,
           billNumber: num || null,
+          billCongress: v.congress || congress,  // Use vote's congress, fallback to prop
           title: displayTitle,
           votes: [],
         });
@@ -423,6 +425,7 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
               >
                 <button
                   onClick={() => {
+                        console.log('DEBUG navigation:', { billCongress: g.billCongress, billType: g.billType, billNumber: g.billNumber });
                     const n = new Set(open);
                     if (n.has(g.key)) n.delete(g.key); else n.add(g.key);
                     setOpen(n);
@@ -443,8 +446,9 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
                   {g.billType && g.billNumber ? (
                     <button
                       onClick={() => {
+                        console.log('DEBUG navigation:', { billCongress: g.billCongress, billType: g.billType, billNumber: g.billNumber });
                         const url = new URL(window.location);
-                        url.searchParams.set('congress', congress);
+                        url.searchParams.set('congress', g.billCongress);
                         url.searchParams.set('billType', g.billType.toLowerCase());
                         url.searchParams.set('billNumber', g.billNumber);
                         url.searchParams.delete('member');

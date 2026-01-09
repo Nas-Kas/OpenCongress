@@ -46,6 +46,8 @@ class MemberRepository:
             SELECT DISTINCT
               -- Create a unique ID for React keys: congress-session-roll
               (hv.congress || '-' || hv.session || '-' || hv.roll) AS "voteId",
+              hv.congress,
+              hv.session,
               hvm.roll,
               hv.legislation_type AS "legislationType", 
               hv.legislation_number AS "legislationNumber",
