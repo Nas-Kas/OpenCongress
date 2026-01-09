@@ -112,7 +112,6 @@ def _format_financial_info(financial_info: dict) -> str:
     
     return "; ".join(parts)
 
-
 @router.post("/bill/{congress}/{bill_type}/{bill_number}/generate-summary")
 async def generate_bill_summary(
     congress: int,
@@ -141,58 +140,58 @@ async def generate_bill_summary(
                 response["cached_at"] = cached['created_at'].isoformat()
                 return response
         
-        # Check if bill text exists
+        # Get text versions to find a PDF
         text_versions = await bill_repo.get_bill_text_versions(congress, bill_type, bill_number)
         
-        if not text_versions:
-            bill = await bill_repo.get_bill(congress, bill_type, bill_number)
-            if not bill:
-                raise HTTPException(404, "Bill not found in database")
-            else:
-                raise HTTPException(404, "Bill text not available - no text versions found")
-        
-        # Generate summary
+        # Define the summary generation task
         async def generate_summary_task():
-            # Try Gemini first if available
+            # Strategy A: Use Gemini if PDF is available
             if GEMINI_API_KEY:
                 pdf_url = None
                 for version in text_versions:
-                    if version['url'] and version['url'].endswith('.pdf'):
+                    if version.get('url') and version['url'].endswith('.pdf'):
                         pdf_url = version['url']
                         break
                 
                 if pdf_url:
+                    print(f"DEBUG: Using Gemini for PDF: {pdf_url}")
                     gemini_summarizer = GeminiBillSummarizer(GEMINI_API_KEY)
-                    result = gemini_summarizer.summarize_bill_from_url(pdf_url, congress, bill_type, bill_number)
+                    # Run synchronous PDF processing in a separate thread
+                    result = await asyncio.to_thread(
+                        gemini_summarizer.summarize_bill_from_url, 
+                        pdf_url, congress, bill_type, bill_number
+                    )
                     
                     if result and result.get('success'):
+                        # Important: Unpack 'summary_data' so the rest of the method works
                         return {
-                            'title': result['title'],
-                            'url': result['source_url'],
-                            'length': result['text_length'],
-                            'scraped_at': result['scraped_at']
-                        }, result['summary_data']
+                            'title': result.get('title'),
+                            'url': result.get('source_url'),
+                            'length': result.get('text_length'),
+                            'scraped_at': result.get('scraped_at')
+                        }, result.get('summary_data', {})
             
-            # Fallback to text scraper
+            # Fallback to traditional text scraper
+            print("DEBUG: Falling back to text scraper")
             scraper = BillTextScraper(API_KEY)
-            bill_data = scraper.get_bill_text(congress, bill_type, bill_number)
+            bill_data = await asyncio.to_thread(scraper.get_bill_text, congress, bill_type, bill_number)
             
-            if not bill_data:
+            if not bill_data or not bill_data.get('text'):
                 raise HTTPException(404, "Could not fetch bill text from congress.gov")
             
             summary_data = scraper.generate_summary(bill_data['text'], bill_data['title'])
             return bill_data, summary_data
         
-        # Run with timeout
+        # Run the task with timeout
         try:
             bill_data, summary_data = await asyncio.wait_for(
                 generate_summary_task(),
                 timeout=300.0
             )
         except asyncio.TimeoutError:
-            raise HTTPException(408, "Summary generation timed out - bill may be too large")
+            raise HTTPException(408, "Summary generation timed out")
         
-        # Format response
+        # Format the response data
         response_data = {
             "success": True,
             "cached": False,
@@ -200,21 +199,21 @@ async def generate_bill_summary(
                 "congress": congress,
                 "bill_type": bill_type,
                 "bill_number": bill_number,
-                "title": bill_data['title'],
-                "source_url": bill_data['url'],
-                "text_length": bill_data['length']
+                "title": bill_data.get('title', 'Unknown Title'),
+                "source_url": bill_data.get('url'),
+                "text_length": bill_data.get('length', 0)
             },
-            "generated_at": bill_data['scraped_at']
+            "generated_at": bill_data.get('scraped_at')
         }
         
-        # Handle Gemini vs traditional scraper response
+        # Align keys between Gemini (tldr) and Scraper (summary)
         if 'tldr' in summary_data:
             response_data.update({
                 "tldr": summary_data['tldr'],
-                "keyPoints": summary_data['keyPoints'],
-                "financialInfo": summary_data['financialInfo'],
-                "importance": summary_data['importance'],
-                "readingTime": summary_data['readingTime'],
+                "keyPoints": summary_data.get('keyPoints', []),
+                "financialInfo": summary_data.get('financialInfo', "Not specified"),
+                "importance": summary_data.get('importance', 3),
+                "readingTime": summary_data.get('readingTime', "Unknown"),
                 "analysis": {
                     "key_phrases": summary_data.get('key_phrases', [])[:10],
                     "sections": summary_data.get('sections', [])[:5],
@@ -224,21 +223,19 @@ async def generate_bill_summary(
             })
         else:
             response_data.update({
-                "tldr": summary_data['summary'],
-                "keyPoints": [phrase['context'][:100] + "..." if len(phrase['context']) > 100 else phrase['context']
-                             for phrase in summary_data['key_phrases'][:5]],
-                "financialInfo": _format_financial_info(summary_data['financial_info']),
-                "importance": min(5, max(1, len(summary_data['key_phrases']) // 3 + 2)),
-                "readingTime": f"{summary_data['estimated_reading_time']} minute{'s' if summary_data['estimated_reading_time'] != 1 else ''}",
+                "tldr": summary_data.get('summary', "Summary unavailable"),
+                "keyPoints": [phrase['context'][:100] + "..." for phrase in summary_data.get('key_phrases', [])[:5]],
+                "financialInfo": _format_financial_info(summary_data.get('financial_info', {})),
+                "importance": 3,
+                "readingTime": f"{summary_data.get('estimated_reading_time', 1)} min",
                 "analysis": {
-                    "key_phrases": summary_data['key_phrases'][:10],
-                    "sections": summary_data['sections'][:5],
-                    "word_count": summary_data['word_count'],
-                    "estimated_reading_time": summary_data['estimated_reading_time']
+                    "key_phrases": summary_data.get('key_phrases', [])[:10],
+                    "sections": summary_data.get('sections', [])[:5],
+                    "word_count": summary_data.get('word_count', 0),
+                    "estimated_reading_time": summary_data.get('estimated_reading_time', 1)
                 }
             })
         
-        # Cache if valid
         if response_data.get('tldr') and response_data['tldr'].strip():
             await bill_repo.cache_summary(congress, bill_type, bill_number, response_data)
         
@@ -247,8 +244,141 @@ async def generate_bill_summary(
     except HTTPException:
         raise
     except Exception as e:
+        print(f"CRITICAL ERROR: {str(e)}")
         raise HTTPException(500, f"Error generating summary: {str(e)}")
+    """Generate AI-powered bill summary with caching."""
+    import asyncio
+    import json
+    
+    bill_repo = BillRepository(pool)
+    
+    try:
+        # Check cache unless force_refresh is True
+        if not force_refresh:
+            cached = await bill_repo.get_cached_summary(congress, bill_type, bill_number)
+            if cached:
+                summary_data = cached['summary']
+                if isinstance(summary_data, str):
+                    summary_data = json.loads(summary_data)
+                
+                response = dict(summary_data)
+                response["cached"] = True
+                response["cached_at"] = cached['created_at'].isoformat()
+                return response
+        
+        # Check if bill metadata/versions exist in DB
+        text_versions = await bill_repo.get_bill_text_versions(congress, bill_type, bill_number)
+        
+        async def generate_summary_task():
+            # Try Gemini via PDF URL first
+            if GEMINI_API_KEY:
+                pdf_url = None
+                # Look for a PDF version in the database records
+                for version in text_versions:
+                    if version.get('url') and version['url'].endswith('.pdf'):
+                        pdf_url = version['url']
+                        break
+                
+                if pdf_url:
+                    print(f"DEBUG: Found PDF URL in DB: {pdf_url}")
+                    gemini_summarizer = GeminiBillSummarizer(GEMINI_API_KEY)
+                    # Run synchronous PDF processing in a separate thread to avoid blocking
+                    result = await asyncio.to_thread(
+                        gemini_summarizer.summarize_bill_from_url, 
+                        pdf_url, congress, bill_type, bill_number
+                    )
+                    
+                    if result and result.get('success'):
+                        # Flatten the Gemini response to match our expected schema
+                        summary_flat = result.get('summary_data', {})
+                        bill_meta = {
+                            'title': result.get('title', f"{bill_type.upper()} {bill_number}"),
+                            'url': result.get('source_url', pdf_url),
+                            'length': result.get('text_length', 0),
+                            'scraped_at': result.get('scraped_at')
+                        }
+                        return bill_meta, summary_flat
 
+            #  Fallback to local text scraper (if no PDF or no Gemini)
+            print("DEBUG: Falling back to local scraper...")
+            scraper = BillTextScraper(API_KEY)
+            # Run synchronous scraping in a separate thread
+            bill_data = await asyncio.to_thread(scraper.get_bill_text, congress, bill_type, bill_number)
+            
+            if not bill_data or not bill_data.get('text'):
+                raise HTTPException(404, "Could not fetch bill text for analysis")
+            
+            # Scraper uses a slightly different method name: generate_summary
+            summary_data = scraper.generate_summary(bill_data['text'], bill_data['title'])
+            return bill_data, summary_data
+
+        # Execute the task with a 5-minute timeout (important for large bills)
+        try:
+            bill_data, summary_data = await asyncio.wait_for(
+                generate_summary_task(),
+                timeout=300.0
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(408, "Summary generation timed out - the bill may be exceptionally large")
+
+        # Format the final response to ensure all keys required by UI exist
+        response_data = {
+            "success": True,
+            "cached": False,
+            "bill_info": {
+                "congress": congress,
+                "bill_type": bill_type,
+                "bill_number": bill_number,
+                "title": bill_data.get('title', 'Unknown Title'),
+                "source_url": bill_data.get('url'),
+                "text_length": bill_data.get('length', 0)
+            },
+            "generated_at": bill_data.get('scraped_at')
+        }
+        
+        # Merge AI analysis into top-level of response_data
+        # We handle both the Gemini 'tldr' key and the Scraper 'summary' key here
+        if 'tldr' in summary_data:
+            response_data.update({
+                "tldr": summary_data['tldr'],
+                "keyPoints": summary_data.get('keyPoints', []),
+                "financialInfo": summary_data.get('financialInfo', "Not specified"),
+                "importance": summary_data.get('importance', 3),
+                "readingTime": summary_data.get('readingTime', "Unknown"),
+                "analysis": {
+                    "key_phrases": summary_data.get('key_phrases', [])[:10],
+                    "sections": summary_data.get('sections', [])[:5],
+                    "word_count": summary_data.get('word_count', 0),
+                    "estimated_reading_time": summary_data.get('estimated_reading_time', 1)
+                }
+            })
+        else:
+            # Traditional Scraper structure
+            response_data.update({
+                "tldr": summary_data.get('summary', "Summary unavailable"),
+                "keyPoints": [p['context'][:150] + "..." for p in summary_data.get('key_phrases', [])[:5]],
+                "financialInfo": str(summary_data.get('financial_info', "None")),
+                "importance": 3,
+                "readingTime": f"{summary_data.get('estimated_reading_time', 1)} min",
+                "analysis": {
+                    "key_phrases": summary_data.get('key_phrases', [])[:10],
+                    "sections": summary_data.get('sections', [])[:5],
+                    "word_count": summary_data.get('word_count', 0),
+                    "estimated_reading_time": summary_data.get('estimated_reading_time', 1)
+                }
+            })
+        
+        # Cache the successful result
+        if response_data.get('tldr'):
+            await bill_repo.cache_summary(congress, bill_type, bill_number, response_data)
+        
+        return response_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"CRITICAL ERROR in generate_bill_summary: {str(e)}")
+        raise HTTPException(500, f"Error generating summary: {str(e)}")
 
 # === RAG SYSTEM ENDPOINTS ===
 

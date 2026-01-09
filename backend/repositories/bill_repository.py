@@ -178,3 +178,25 @@ class BillRepository:
             congress, bill_type.lower(), bill_number
         )
         return count or 0
+
+    async def cache_summary(self, congress: int, bill_type: str, bill_number: str, summary_data: dict, conn=None):
+        """Saves or updates a bill summary in the database."""
+        import json
+        
+        # Convert dict to JSON string for Postgres jsonb/text column
+        summary_json = json.dumps(summary_data)
+        
+        sql = """
+            INSERT INTO bill_summaries (congress, bill_type, bill_number, summary, created_at)
+            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+            ON CONFLICT (congress, bill_type, bill_number) 
+            DO UPDATE SET 
+                summary = EXCLUDED.summary,
+                created_at = CURRENT_TIMESTAMP
+        """
+        
+        if conn:
+            await conn.execute(sql, congress, bill_type.lower(), bill_number, summary_json)
+        else:
+            async with self.pool.acquire() as new_conn:
+                await new_conn.execute(sql, congress, bill_type.lower(), bill_number, summary_json)
