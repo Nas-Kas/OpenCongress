@@ -1,12 +1,9 @@
 """
 FastAPI application - main entry point.
-
-This file contains:
-- App initialization
-- Middleware configuration
-- Route registration
-- Startup/shutdown events
 """
+import asyncio
+from contextlib import asynccontextmanager
+from typing import List
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import asyncpg
@@ -25,13 +22,48 @@ ALLOWED_ORIGINS = os.getenv(
 ).split(",")
 
 if not DATABASE_URL:
-    raise RuntimeError("Missing DATABASE_URL in .env")
+    raise RuntimeError("Missing DATABASE_URL in environment variables")
 
-# Initialize FastAPI app
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Handles startup and shutdown logic.
+    Using a timeout here prevents the 'No open ports' hang on Render.
+    """
+    print("--> Starting application lifespan...")
+    try:
+        print(f"--> Connecting to database at {DATABASE_URL.split('@')[-1]}...") # Log host only for safety
+        
+        app.state.pool = await asyncio.wait_for(
+            asyncpg.create_pool(
+                DATABASE_URL, 
+                min_size=1, 
+                max_size=5,
+                command_timeout=60,
+                server_settings={'search_path': 'public,extensions'}
+            ),
+            timeout=10.0
+        )
+        print("✓ Database connection pool initialized")
+    except asyncio.TimeoutError:
+        print("✗ CRITICAL: Database connection timed out after 10 seconds.")
+        # Raising an error here stops the deploy and shows a clear failure in Render
+        raise RuntimeError("Database connection timeout during startup")
+    except Exception as e:
+        print(f"✗ CRITICAL: Database initialization failed: {e}")
+        raise e
+
+    yield
+
+    if hasattr(app.state, "pool"):
+        await app.state.pool.close()
+        print("✓ Database connection pool closed")
+
 app = FastAPI(
     title="Congressional Data API",
-    description="API for congressional bills, votes, and members with AI-powered analysis",
-    version="2.0.0"
+    description="API for congressional bills, votes, and members",
+    version="2.0.0",
+    lifespan=lifespan
 )
 
 # Configure CORS
@@ -48,53 +80,26 @@ app.include_router(votes.router)
 app.include_router(members.router)
 app.include_router(bills.router)
 
-
-@app.on_event("startup")
-async def startup():
-    """Initialize database connection pool on startup."""
-    app.state.pool = await asyncpg.create_pool(
-        DATABASE_URL, 
-        min_size=1, 
-        max_size=10,
-        server_settings={'search_path': 'public,extensions'}
-    )
-    print("✓ Database connection pool initialized")
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    """Close database connection pool on shutdown."""
-    await app.state.pool.close()
-    print("✓ Database connection pool closed")
-
-
+# --- Standard Endpoints ---
 @app.get("/")
 async def root():
-    """Health check endpoint."""
+    """Basic health check for Render."""
     return {
         "status": "ok",
         "service": "Congressional Data API",
-        "version": "2.0.0",
-        "features": [
-            "House roll-call votes",
-            "Member voting records",
-            "Bill tracking and analysis",
-            "AI-powered bill summaries",
-            "RAG-based bill Q&A"
-        ]
+        "version": "2.0.0"
     }
 
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check with database connectivity."""
+    """Deep health check verifying database connectivity."""
     try:
         async with app.state.pool.acquire() as conn:
             await conn.fetchval("SELECT 1")
         return {
             "status": "healthy",
-            "database": "connected",
-            "version": "2.0.0"
+            "database": "connected"
         }
     except Exception as e:
         return {
