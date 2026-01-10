@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import BillLabel from "./components/BillLabel";
+import { InlineSpinner } from "./components";
+import { useDebouncedValue } from "./hooks/useDebouncedValue";
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
@@ -193,6 +195,7 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
 
   // filters
   const [q, setQ] = useState("");
+  const debouncedQ = useDebouncedValue(q, 400);
   const [fPos, setFPos] = useState("all");
   const [fRes, setFRes] = useState("all");
   const [fType, setFType] = useState("all");
@@ -206,7 +209,7 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
     const ctrl = new AbortController();
     setLoading(true);
     setErr(null);
-    setData(null);
+    // Don't clear data - keep showing old results while fetching
 
     // Build query parameters
     const params = new URLSearchParams({
@@ -215,10 +218,10 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
       limit: '200',
       offset: '0'
     });
-    
-    // Add search parameter if provided
-    if (q.trim()) {
-      params.set('search', q.trim());
+
+    // Add search parameter if provided (use debounced value)
+    if (debouncedQ.trim()) {
+      params.set('search', debouncedQ.trim());
     }
 
     fetch(
@@ -231,7 +234,7 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
       .finally(() => setLoading(false));
 
     return () => ctrl.abort();
-  }, [bioguideId, congress, session, q]); // Added q to dependencies for server-side search
+  }, [bioguideId, congress, session, debouncedQ]); // Use debounced value to prevent excessive API calls
 
   const votes = useMemo(() => data?.votes ?? [], [data]);
 
@@ -301,7 +304,8 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
     return arr;
   }, [filtered]);
 
-  if (loading) return <div style={{ padding: 12, color: TOKENS.textMuted }}>Loading member…</div>;
+  // Only show full loading screen if we have no data yet
+  if (loading && !data) return <div style={{ padding: 12, color: TOKENS.textMuted }}>Loading member…</div>;
   if (err) return <div style={{ padding: 12, color: "#B42318" }}>Error: {err}</div>;
   if (!data) return <div style={{ padding: 12 }}>No data.</div>;
 
@@ -348,12 +352,17 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
 
         {/* Filters */}
         <div style={{ display: "grid", gridTemplateColumns: "minmax(260px,1fr) 160px 160px 150px 150px 120px", gap: 8, alignItems: "center" }}>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Filter by bill title or question…"
-            style={inputStyle}
-          />
+          <div style={{ position: "relative" }}>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Filter by bill title or question…"
+              style={{ ...inputStyle, width: "100%", paddingRight: 36 }}
+            />
+            {loading && (
+              <InlineSpinner className="absolute right-3 top-1/2 -translate-y-1/2" />
+            )}
+          </div>
           <select value={fPos} onChange={(e) => setFPos(e.target.value)} style={selectStyle}>
             <option value="all">All positions</option>
             <option value="Yea">Yea</option>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { ResultBadge, VoteButton } from "./components";
+import { ResultBadge, VoteButton, InlineSpinner } from "./components";
 import BillLabel from "./components/BillLabel";
+import { useDebouncedValue } from "./hooks/useDebouncedValue";
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
@@ -63,6 +64,7 @@ export default function VotedBillsTable({
   const [loading, setLoading] = useState(true);
 
   const [q, setQ] = useState("");
+  const debouncedQ = useDebouncedValue(q, 400);
   const [fRes, setFRes] = useState("all");
   const [fType, setFType] = useState("all");
   const [from, setFrom] = useState("");
@@ -78,8 +80,8 @@ export default function VotedBillsTable({
     const ctrl = new AbortController();
     setLoading(true);
     setErr(null);
-    setData(null);
-    
+    // Don't clear data - keep showing old results while fetching
+
     // Build query parameters
     const params = new URLSearchParams({
       congress: congress.toString(),
@@ -87,12 +89,12 @@ export default function VotedBillsTable({
       limit: '200',
       offset: '0'
     });
-    
-    // Add search parameter if provided
-    if (q.trim()) {
-      params.set('search', q.trim());
+
+    // Add search parameter if provided (use debounced value)
+    if (debouncedQ.trim()) {
+      params.set('search', debouncedQ.trim());
     }
-    
+
     fetch(
       `${API_URL}/house/votes?${params.toString()}`,
       { signal: ctrl.signal }
@@ -102,7 +104,7 @@ export default function VotedBillsTable({
       .catch((e) => { if (e.name !== "AbortError") setErr(String(e)); })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [congress, session, q]); // Added q to dependencies for server-side search
+  }, [congress, session, debouncedQ]); // Use debounced value to prevent excessive API calls
 
   const votes = useMemo(() => data?.votes ?? [], [data]);
 
@@ -178,7 +180,8 @@ export default function VotedBillsTable({
     setCurrentPage(1);
   }, [q, fRes, fType, from, to]);
 
-  if (loading) return <div className="p-3 text-gray-500">Loading voted bills…</div>;
+  // Only show full loading screen if we have no data yet
+  if (loading && !data) return <div className="p-3 text-gray-500">Loading voted bills…</div>;
   if (err) return <div className="p-3 text-red-600">Error: {err}</div>;
 
 
@@ -186,12 +189,17 @@ export default function VotedBillsTable({
     <div className="bg-gray-50 p-2 rounded-lg">
       {/* Controls */}
       <div className="grid grid-cols-[minmax(260px,1fr)_180px_160px_150px_150px_120px] gap-2 items-center mb-2">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Filter by title, question, type, or number…"
-          className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white"
-        />
+        <div className="relative">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Filter by title, question, type, or number…"
+            className="w-full px-3 py-2.5 pr-9 rounded-lg border border-gray-300 bg-white"
+          />
+          {loading && (
+            <InlineSpinner className="absolute right-3 top-1/2 -translate-y-1/2" />
+          )}
+        </div>
         <select value={fRes} onChange={(e) => setFRes(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white">
           <option value="all">Any result</option>
           <option value="passed">Passed/Agreed</option>

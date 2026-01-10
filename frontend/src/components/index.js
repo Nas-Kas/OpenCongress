@@ -1,5 +1,5 @@
 // Common UI Components
-export { LoadingSpinner } from './common/LoadingSpinner';
+export { LoadingSpinner, InlineSpinner } from './common/LoadingSpinner';
 export { ErrorMessage } from './common/ErrorMessage';
 export { VoteButton } from './ui/VoteButton';
 export { ResultBadge } from './ui/ResultBadge';

@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
-import { LoadingSpinner, ErrorMessage, BillCard } from "./components";
+import { LoadingSpinner, ErrorMessage, BillCard, InlineSpinner } from "./components";
+import { useDebouncedValue } from "./hooks/useDebouncedValue";
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
@@ -11,6 +12,7 @@ export default function BillsWithoutVotes({ onSelectBill }) {
   // Filter states
   const [congress, setCongress] = useState(119);
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebouncedValue(searchQuery, 400);
   const [billType, setBillType] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -22,16 +24,17 @@ export default function BillsWithoutVotes({ onSelectBill }) {
     const ctrl = new AbortController();
     setLoading(true);
     setError(null);
+    // Don't clear bills - keep showing old results while fetching
 
     const params = new URLSearchParams({
       congress: congress.toString(),
-      limit: "200", // Reduced since we're using server-side filtering
+      limit: "200",
       offset: "0"
     });
 
-    // Add server-side filters
-    if (searchQuery.trim()) {
-      params.set('search', searchQuery.trim());
+    // Add server-side filters (use debounced search value)
+    if (debouncedSearch.trim()) {
+      params.set('search', debouncedSearch.trim());
     }
     if (billType !== "all") {
       params.set('bill_type', billType.toLowerCase());
@@ -49,7 +52,7 @@ export default function BillsWithoutVotes({ onSelectBill }) {
       .finally(() => setLoading(false));
 
     return () => ctrl.abort();
-  }, [congress, searchQuery, billType]); // Added search and billType to dependencies
+  }, [congress, debouncedSearch, billType]); // Use debounced value to prevent excessive API calls
 
   // Get unique bill types from loaded bills
   const uniqueTypes = useMemo(() => {
@@ -111,7 +114,8 @@ export default function BillsWithoutVotes({ onSelectBill }) {
 
   const hasActiveFilters = searchQuery || billType !== "all" || fromDate || toDate;
 
-  if (loading) {
+  // Only show full loading screen if we have no data yet
+  if (loading && bills.length === 0) {
     return <LoadingSpinner message="Loading bills without votes..." />;
   }
 
@@ -133,12 +137,17 @@ export default function BillsWithoutVotes({ onSelectBill }) {
       <div className="bg-gray-50 p-2 rounded-lg mb-4">
         {/* Main filter row */}
         <div className="grid grid-cols-[minmax(200px,1fr)_140px_140px_140px_140px_auto] gap-2 items-center mb-2">
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Filter by bill number or title..."
-            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm"
-          />
+          <div className="relative">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Filter by bill number or title..."
+              className="w-full px-3 py-2.5 pr-9 rounded-lg border border-gray-300 bg-white text-sm"
+            />
+            {loading && (
+              <InlineSpinner className="absolute right-3 top-1/2 -translate-y-1/2" />
+            )}
+          </div>
           
           <select
             value={congress}
