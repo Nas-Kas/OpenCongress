@@ -351,54 +351,76 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
         </header>
 
         {/* Filters */}
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(260px,1fr) 160px 160px 150px 150px 120px", gap: 8, alignItems: "center" }}>
-          <div style={{ position: "relative" }}>
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="relative flex-1 min-w-[200px]">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Filter by bill title or question…"
-              style={{ ...inputStyle, width: "100%", paddingRight: 36 }}
+              className="w-full px-3 py-2.5 pr-9 rounded-lg border border-gray-300 bg-white text-sm"
             />
             {loading && (
               <InlineSpinner className="absolute right-3 top-1/2 -translate-y-1/2" />
             )}
           </div>
-          <select value={fPos} onChange={(e) => setFPos(e.target.value)} style={selectStyle}>
+          <select
+            value={fPos}
+            onChange={(e) => setFPos(e.target.value)}
+            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm min-w-[130px]"
+          >
             <option value="all">All positions</option>
             <option value="Yea">Yea</option>
             <option value="Nay">Nay</option>
             <option value="Present">Present</option>
             <option value="Not Voting">Not Voting</option>
           </select>
-          <select value={fRes} onChange={(e) => setFRes(e.target.value)} style={selectStyle}>
+          <select
+            value={fRes}
+            onChange={(e) => setFRes(e.target.value)}
+            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm min-w-[130px]"
+          >
             <option value="all">Any result</option>
             <option value="passed">Passed/Agreed</option>
             <option value="failed">Failed/Rejected</option>
             <option value="other">Other</option>
           </select>
-          <select value={fType} onChange={(e) => setFType(e.target.value)} style={selectStyle}>
-            <option value="all">All bill types</option>
+          <select
+            value={fType}
+            onChange={(e) => setFType(e.target.value)}
+            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm min-w-[120px]"
+          >
+            <option value="all">All types</option>
             {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={selectStyle} />
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={selectStyle} />
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm"
+          />
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm"
+          />
+          {(q || fPos !== "all" || fRes !== "all" || fType !== "all" || from || to) && (
+            <button
+              onClick={() => { setQ(""); setFPos("all"); setFRes("all"); setFType("all"); setFrom(""); setTo(""); }}
+              className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm hover:bg-gray-50 cursor-pointer"
+            >
+              Reset
+            </button>
+          )}
         </div>
 
-        <div style={{ marginTop: 6, fontSize: 12, color: TOKENS.textMuted }}>
+        <div className="mt-2 text-xs text-gray-500">
           Showing <strong>{filtered.length}</strong> votes across <strong>{groups.length}</strong> bills
-          {q && <> • search: “{q}”</>}
+          {q && <> • search: "{q}"</>}
           {fPos !== "all" && <> • position: {fPos}</>}
           {fRes !== "all" && <> • result: {fRes}</>}
           {fType !== "all" && <> • type: {fType}</>}
           {(from || to) && <> • date: {from || "…"}–{to || "…"}</>}
-          {(q || fPos !== "all" || fRes !== "all" || fType !== "all" || from || to) && (
-            <> • <button
-              onClick={() => { setQ(""); setFPos("all"); setFRes("all"); setFType("all"); setFrom(""); setTo(""); }}
-              style={{ border: 0, background: "transparent", color: "#1d4ed8", textDecoration: "underline", cursor: "pointer" }}
-            >
-              reset
-            </button></>
-          )}
         </div>
       </div>
 
