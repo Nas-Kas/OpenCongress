@@ -136,8 +136,8 @@ export default function BillsWithoutVotes({ onSelectBill }) {
       {/* Filters - matching House Roll-Call Votes layout */}
       <div className="bg-gray-50 p-2 rounded-lg mb-4">
         {/* Main filter row */}
-        <div className="grid grid-cols-[minmax(200px,1fr)_140px_140px_140px_140px_auto] gap-2 items-center mb-2">
-          <div className="relative">
+        <div className="flex flex-wrap gap-2 items-center mb-2">
+          <div className="relative flex-1 min-w-[200px]">
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -148,11 +148,11 @@ export default function BillsWithoutVotes({ onSelectBill }) {
               <InlineSpinner className="absolute right-3 top-1/2 -translate-y-1/2" />
             )}
           </div>
-          
+
           <select
             value={congress}
             onChange={(e) => setCongress(parseInt(e.target.value))}
-            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm"
+            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm min-w-[130px]"
           >
             <option value={119}>119th Congress</option>
             <option value={118}>118th Congress</option>
@@ -161,9 +161,9 @@ export default function BillsWithoutVotes({ onSelectBill }) {
           <select
             value={billType}
             onChange={(e) => setBillType(e.target.value)}
-            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm"
+            className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm min-w-[120px]"
           >
-            <option value="all">All bill types</option>
+            <option value="all">All types</option>
             {uniqueTypes.map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
@@ -185,17 +185,15 @@ export default function BillsWithoutVotes({ onSelectBill }) {
             className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm"
           />
 
-          <div className="flex gap-1.5">
-            {hasActiveFilters && (
-              <button
-                onClick={clearFilters}
-                className="border border-gray-300 bg-white text-gray-900 rounded-lg px-3 py-2 cursor-pointer text-sm hover:bg-gray-50"
-                title="Clear all filters"
-              >
-                Reset
-              </button>
-            )}
-          </div>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="border border-gray-300 bg-white text-gray-700 rounded-lg px-3 py-2.5 cursor-pointer text-sm hover:bg-gray-50"
+              title="Clear all filters"
+            >
+              Reset
+            </button>
+          )}
         </div>
 
         {/* Summary line */}

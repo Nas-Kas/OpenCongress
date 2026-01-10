@@ -188,36 +188,36 @@ export default function VotedBillsTable({
   return (
     <div className="bg-gray-50 p-2 rounded-lg">
       {/* Controls */}
-      <div className="grid grid-cols-[minmax(260px,1fr)_180px_160px_150px_150px_120px] gap-2 items-center mb-2">
-        <div className="relative">
+      <div className="flex flex-wrap gap-2 items-center mb-2">
+        <div className="relative flex-1 min-w-[200px]">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Filter by title, question, type, or number…"
-            className="w-full px-3 py-2.5 pr-9 rounded-lg border border-gray-300 bg-white"
+            className="w-full px-3 py-2.5 pr-9 rounded-lg border border-gray-300 bg-white text-sm"
           />
           {loading && (
             <InlineSpinner className="absolute right-3 top-1/2 -translate-y-1/2" />
           )}
         </div>
-        <select value={fRes} onChange={(e) => setFRes(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white">
+        <select value={fRes} onChange={(e) => setFRes(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm min-w-[130px]">
           <option value="all">Any result</option>
           <option value="passed">Passed/Agreed</option>
           <option value="failed">Failed/Rejected</option>
           <option value="other">Other</option>
         </select>
-        <select value={fType} onChange={(e) => setFType(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white">
-          <option value="all">All bill types</option>
+        <select value={fType} onChange={(e) => setFType(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm min-w-[120px]">
+          <option value="all">All types</option>
           {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white" />
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white" />
-        <div className="flex gap-1.5 justify-end">
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm" />
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm" />
+        <div className="flex gap-1.5">
           <DensityToggle value={density} onChange={setDensity} />
           {(q || fRes !== "all" || fType !== "all" || from || to) && (
             <button
               onClick={() => { setQ(""); setFRes("all"); setFType("all"); setFrom(""); setTo(""); }}
-              className="border border-gray-300 bg-white text-gray-900 rounded-lg px-2 py-2 cursor-pointer"
+              className="border border-gray-300 bg-white text-gray-700 rounded-lg px-3 py-2.5 cursor-pointer text-sm hover:bg-gray-50"
               title="Clear all filters"
             >
               Reset
@@ -263,83 +263,89 @@ export default function VotedBillsTable({
               key={g.key}
               className="bg-white border border-gray-300 rounded-lg shadow-sm overflow-hidden"
             >
-              {/* Header row */}
+              {/* Header row - responsive: stack on mobile */}
               <div
-                className={`grid grid-cols-[28px_minmax(260px,1fr)_340px_1fr_150px] items-center gap-3 px-3 border-b border-gray-100 ${density === "compact" ? "py-2" : "py-3"}`}
+                className={`flex flex-col md:flex-row md:items-center gap-3 px-3 border-b border-gray-100 ${density === "compact" ? "py-2" : "py-3"}`}
               >
-                <button
-                  onClick={() => {
-                    const n = new Set(open);
-                    if (n.has(g.key)) n.delete(g.key); else n.add(g.key);
-                    setOpen(n);
-                  }}
-                  title={isOpen ? "Hide roll calls" : "Show roll calls"}
-                  className={`h-8 w-8 rounded-lg border-2 cursor-pointer font-bold text-lg transition-colors ${
-                    isOpen 
-                      ? "border-blue-500 bg-blue-50 text-blue-600 hover:bg-blue-100" 
-                      : "border-gray-400 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-500"
-                  }`}
-                >
-                  {isOpen ? "▾" : "▸"}
-                </button>
+                {/* Row 1 on mobile: expand button + title */}
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <button
+                    onClick={() => {
+                      const n = new Set(open);
+                      if (n.has(g.key)) n.delete(g.key); else n.add(g.key);
+                      setOpen(n);
+                    }}
+                    title={isOpen ? "Hide roll calls" : "Show roll calls"}
+                    className={`h-8 w-8 rounded-lg border-2 cursor-pointer font-bold text-lg transition-colors flex-shrink-0 ${
+                      isOpen
+                        ? "border-blue-500 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                        : "border-gray-400 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-500"
+                    }`}
+                  >
+                    {isOpen ? "▾" : "▸"}
+                  </button>
 
-                <div className="min-w-0">
-                  {g.billType && g.billNumber ? (
-                    <button
-                      onClick={() => onSelectBill?.({
-                        congress: g.billCongress,
-                        billType: g.billType.toLowerCase(),
-                        billNumber: g.billNumber,
-                        title: g.title,
-                        legislationType: g.billType,
-                        legislationNumber: g.billNumber
-                      })}
-                      className="border-0 bg-transparent p-0 cursor-pointer text-blue-600 underline text-sm font-semibold text-left"
-                    >
-                      {g.title || `${g.billType} ${g.billNumber}`}
-                    </button>
-                  ) : (
-                    <span className="text-gray-900">{g.title || "(Untitled bill)"}</span>
-                  )}
-                  <div className="flex gap-2 mt-1.5 items-center flex-wrap">
-                    {g.billType && g.billNumber && (
-                      <span className="rounded-md px-1.5 py-0.5 text-xs bg-gray-100 text-gray-700 border border-gray-300">
-                        <BillLabel 
-                          legislationType={g.billType}
-                          legislationNumber={g.billNumber}
-                          subjectBillType={g.latest?.subjectBillType}
-                          subjectBillNumber={g.latest?.subjectBillNumber}
-                        />
-                      </span>
+                  <div className="min-w-0 flex-1">
+                    {g.billType && g.billNumber ? (
+                      <button
+                        onClick={() => onSelectBill?.({
+                          congress: g.billCongress,
+                          billType: g.billType.toLowerCase(),
+                          billNumber: g.billNumber,
+                          title: g.title,
+                          legislationType: g.billType,
+                          legislationNumber: g.billNumber
+                        })}
+                        className="border-0 bg-transparent p-0 cursor-pointer text-blue-700 underline text-sm font-semibold text-left"
+                      >
+                        {g.title || `${g.billType} ${g.billNumber}`}
+                      </button>
+                    ) : (
+                      <span className="text-gray-900">{g.title || "(Untitled bill)"}</span>
                     )}
-                    {g.latest?.started && (
-                      <span className="text-xs text-gray-500">{String(g.latest.started).slice(0, 10)}</span>
-                    )}
+                    <div className="flex gap-2 mt-1.5 items-center flex-wrap">
+                      {g.billType && g.billNumber && (
+                        <span className="rounded-md px-1.5 py-0.5 text-xs bg-gray-100 text-gray-700 border border-gray-200">
+                          <BillLabel
+                            legislationType={g.billType}
+                            legislationNumber={g.billNumber}
+                            subjectBillType={g.latest?.subjectBillType}
+                            subjectBillNumber={g.latest?.subjectBillNumber}
+                          />
+                        </span>
+                      )}
+                      {g.latest?.started && (
+                        <span className="text-xs text-gray-500">{String(g.latest.started).slice(0, 10)}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex gap-2.5 items-center flex-wrap">
+                {/* Row 2 on mobile: result + counts */}
+                <div className="flex gap-2.5 items-center flex-wrap md:flex-nowrap">
                   <ResultBadge result={g.latest?.result} />
                   <Counts c={latestCounts} />
                 </div>
 
-                {/* tiny outcome spark */}
-                <div className="flex gap-1 flex-wrap items-center">
-                  {g.votes.slice(0, 8).map((v) => (
-                    <span
-                      key={v.roll}
-                      title={`#${v.roll} • ${v.question || ""}`}
-                      className={`w-2 h-2 rounded-sm inline-block ${classifyResult(v.result) === "passed" ? "bg-green-300" :
-                        classifyResult(v.result) === "failed" ? "bg-red-300" : "bg-gray-300"
+                {/* Row 3 on mobile: outcome sparks + button */}
+                <div className="flex items-center justify-between gap-4 md:gap-2">
+                  {/* tiny outcome spark */}
+                  <div className="flex gap-1 flex-wrap items-center">
+                    {g.votes.slice(0, 8).map((v) => (
+                      <span
+                        key={v.roll}
+                        title={`#${v.roll} • ${v.question || ""}`}
+                        className={`w-2 h-2 rounded-sm inline-block ${
+                          classifyResult(v.result) === "passed" ? "bg-green-300" :
+                          classifyResult(v.result) === "failed" ? "bg-red-300" : "bg-gray-300"
                         }`}
-                    />
-                  ))}
-                  {g.votes.length > 8 && (
-                    <span className="text-gray-500 text-xs">+{g.votes.length - 8}</span>
-                  )}
-                </div>
+                      />
+                    ))}
+                    {g.votes.length > 8 && (
+                      <span className="text-gray-500 text-xs">+{g.votes.length - 8}</span>
+                    )}
+                  </div>
 
-                <div className="flex justify-end">
                   <button
                     onClick={() => {
                       const v = g.latest; if (!v) return;
@@ -351,9 +357,9 @@ export default function VotedBillsTable({
                         legislationNumber: v.legislationNumber
                       });
                     }}
-                    className="border border-blue-600 bg-blue-600 text-white rounded-lg px-2 py-2 cursor-pointer font-bold"
+                    className="border border-blue-600 bg-blue-600 text-white rounded-lg px-2 py-2 cursor-pointer font-bold text-sm whitespace-nowrap"
                   >
-                    Open latest roll
+                    Open latest
                   </button>
                 </div>
               </div>
