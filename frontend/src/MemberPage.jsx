@@ -5,41 +5,6 @@ import { useDebouncedValue } from "./hooks/useDebouncedValue";
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
-/* ================= UI tokens ================= */
-const TOKENS = {
-  radius: 10,
-  border: "#E5E7EB",
-  borderSubtle: "#EEF2F7",
-  text: "#111827",
-  textMuted: "#6B7280",
-  cardBg: "#FFFFFF",
-  pageBg: "#F7F9FC",
-  shadow: "0 1px 2px rgba(0,0,0,0.04), 0 6px 16px rgba(0,0,0,0.04)",
-  badge: {
-    passBg: "#E9F8EE",
-    passFg: "#0B7A45",
-    failBg: "#FDECEC",
-    failFg: "#B42318",
-    otherBg: "#F2F4F7",
-    otherFg: "#344054",
-    yBg: "#EAF8F0",
-    yFg: "#15803D",
-    nBg: "#FDEEEE",
-    nFg: "#B91C1C",
-    pBg: "#F2F4F7",
-    pFg: "#475467",
-    nvBg: "#FEF6E7",
-    nvFg: "#92400E",
-  },
-  btn: {
-    primaryBg: "#2563EB",
-    primaryBgHover: "#1E4ED8",
-    primaryFg: "#FFFFFF",
-    secondaryBorder: "#E5E7EB",
-    secondaryHover: "#F8FAFC",
-  },
-};
-
 /* ================= helpers ================= */
 function classifyResult(result) {
   const s = (result || "").toLowerCase();
@@ -50,46 +15,27 @@ function classifyResult(result) {
 
 function ResultBadge({ result }) {
   const cls = classifyResult(result);
-  const bg =
-    cls === "passed" ? TOKENS.badge.passBg :
-    cls === "failed" ? TOKENS.badge.failBg : TOKENS.badge.otherBg;
-  const fg =
-    cls === "passed" ? TOKENS.badge.passFg :
-    cls === "failed" ? TOKENS.badge.failFg : TOKENS.badge.otherFg;
+  const colors = {
+    passed: "bg-green-100 text-green-700",
+    failed: "bg-red-100 text-red-700",
+    other: "bg-gray-100 text-gray-700",
+  };
   return (
-    <span style={{
-      background: bg, color: fg, padding: "4px 10px",
-      borderRadius: 999, fontSize: 12, fontWeight: 700
-    }}>
+    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${colors[cls]}`}>
       {result || "—"}
     </span>
   );
 }
 
 function PositionChip({ pos }) {
-  const bg =
-    pos === "Yea" ? TOKENS.badge.yBg :
-    pos === "Nay" ? TOKENS.badge.nBg :
-    pos === "Present" ? TOKENS.badge.pBg :
-    TOKENS.badge.nvBg;
-  const fg =
-    pos === "Yea" ? TOKENS.badge.yFg :
-    pos === "Nay" ? TOKENS.badge.nFg :
-    pos === "Present" ? TOKENS.badge.pFg :
-    TOKENS.badge.nvFg;
-
+  const colors = {
+    Yea: "bg-green-100 text-green-700",
+    Nay: "bg-red-100 text-red-700",
+    Present: "bg-gray-100 text-gray-600",
+    "Not Voting": "bg-amber-100 text-amber-700",
+  };
   return (
-    <span style={{
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 6,
-      background: bg,
-      color: fg,
-      borderRadius: 999,
-      padding: "2px 10px",
-      fontSize: 12,
-      fontWeight: 700,
-    }}>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${colors[pos] || "bg-amber-100 text-amber-700"}`}>
       {pos || "—"}
     </span>
   );
@@ -105,22 +51,10 @@ function getCounts(v = {}) {
   };
 }
 
-function CountChip({ label, value, bg, fg }) {
+function CountChip({ label, value, colorClass }) {
   return (
-    <span style={{
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 6,
-      background: bg,
-      color: fg,
-      borderRadius: 999,
-      padding: "2px 10px",
-      fontSize: 12,
-      fontWeight: 700,
-      fontVariantNumeric: "tabular-nums",
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace"
-    }}>
-      <span style={{ opacity: 0.8 }}>{label}</span>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold font-mono tabular-nums ${colorClass}`}>
+      <span className="opacity-80">{label}</span>
       <span>{value ?? 0}</span>
     </span>
   );
@@ -128,64 +62,14 @@ function CountChip({ label, value, bg, fg }) {
 
 function Counts({ c }) {
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <CountChip label="Y" value={c.yea} bg={TOKENS.badge.yBg} fg={TOKENS.badge.yFg} />
-      <CountChip label="N" value={c.nay} bg={TOKENS.badge.nBg} fg={TOKENS.badge.nFg} />
-      <CountChip label="P" value={c.present} bg={TOKENS.badge.pBg} fg={TOKENS.badge.pFg} />
-      <CountChip label="NV" value={c.notVoting} bg={TOKENS.badge.nvBg} fg={TOKENS.badge.nvFg} />
+    <div className="flex gap-2 flex-wrap">
+      <CountChip label="Y" value={c.yea} colorClass="bg-green-100 text-green-700" />
+      <CountChip label="N" value={c.nay} colorClass="bg-red-100 text-red-700" />
+      <CountChip label="P" value={c.present} colorClass="bg-gray-100 text-gray-600" />
+      <CountChip label="NV" value={c.notVoting} colorClass="bg-amber-100 text-amber-700" />
     </div>
   );
 }
-
-/* ================= shared styles ================= */
-const inputStyle = {
-  padding: "10px 12px",
-  borderRadius: 8,
-  border: `1px solid ${TOKENS.border}`,
-  background: "#fff",
-};
-const selectStyle = { ...inputStyle };
-const headCell = {
-  textAlign: "left",
-  fontWeight: 700,
-  fontSize: 12,
-  color: "#344054",
-  padding: "10px 12px",
-  borderBottom: `1px solid ${TOKENS.border}`,
-};
-const cell = {
-  padding: "10px 12px",
-  color: TOKENS.text,
-  fontSize: 13,
-};
-const titleLink = {
-  border: 0, background: "transparent", padding: 0, cursor: "pointer",
-  color: "#1D4ED8", textDecoration: "underline", fontSize: 15, fontWeight: 600, textAlign: "left"
-};
-const miniTag = {
-  borderRadius: 6, padding: "2px 6px", fontSize: 11,
-  background: "#F3F4F6", color: "#374151", border: `1px solid ${TOKENS.border}`
-};
-const miniMuted = { fontSize: 12, color: TOKENS.textMuted };
-const chevBtn = (isOpen) => ({
-  height: 32, width: 32, borderRadius: 8,
-  border: isOpen ? "2px solid #3B82F6" : "2px solid #9CA3AF",
-  background: isOpen ? "#EFF6FF" : "#fff",
-  color: isOpen ? "#2563EB" : "#4B5563",
-  cursor: "pointer",
-  fontSize: 18,
-  fontWeight: 700,
-  transition: "all 0.2s"
-});
-const rowBtn = {
-  border: `1px solid ${TOKENS.btn.secondaryBorder}`,
-  background: "#fff",
-  color: TOKENS.text,
-  borderRadius: 8,
-  padding: "6px 10px",
-  cursor: "pointer",
-  fontWeight: 600,
-};
 
 /* ================= component ================= */
 export default function MemberPage({ bioguideId, congress = 119, session = 1, onOpenRoll }) {
@@ -305,47 +189,40 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
   }, [filtered]);
 
   // Only show full loading screen if we have no data yet
-  if (loading && !data) return <div style={{ padding: 12, color: TOKENS.textMuted }}>Loading member…</div>;
-  if (err) return <div style={{ padding: 12, color: "#B42318" }}>Error: {err}</div>;
-  if (!data) return <div style={{ padding: 12 }}>No data.</div>;
+  if (loading && !data) return <div className="p-3 text-gray-500">Loading member…</div>;
+  if (err) return <div className="p-3 text-red-600">Error: {err}</div>;
+  if (!data) return <div className="p-3">No data.</div>;
 
   const { profile, stats } = data;
 
   const setQuickPos = (p) => setFPos((cur) => (cur === p ? "all" : p));
 
   return (
-    <div style={{ background: TOKENS.pageBg, padding: 8, borderRadius: TOKENS.radius }}>
+    <div className="bg-gray-50 p-2 rounded-lg">
       {/* Card header */}
-      <div style={{
-        background: TOKENS.cardBg,
-        border: `1px solid ${TOKENS.border}`,
-        borderRadius: TOKENS.radius,
-        boxShadow: TOKENS.shadow,
-        padding: 12,
-        marginBottom: 10
-      }}>
-        <header style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8 }}>
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-3 mb-2.5">
+        <header className="flex gap-3 items-center mb-2">
           {profile?.imageUrl && (
             <img
               src={profile.imageUrl}
               alt={profile.name}
               width={56}
               height={56}
-              style={{ borderRadius: 8 }}
+              className="rounded-lg"
             />
           )}
           <div>
-            <h2 style={{ margin: 0, fontSize: 20 }}>{profile?.name}</h2>
-            <div style={{ color: TOKENS.textMuted }}>
+            <h2 className="m-0 text-xl font-bold">{profile?.name}</h2>
+            <div className="text-gray-500">
               {profile?.party} • {profile?.state} • {profile?.bioguideId}
             </div>
 
             {/* Quick chips */}
-            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", fontSize: 13 }}>
-              <Chip color={TOKENS.badge.yBg} onClick={() => setQuickPos("Yea")}>Yea {stats?.yea ?? 0}</Chip>
-              <Chip color={TOKENS.badge.nBg} onClick={() => setQuickPos("Nay")}>Nay {stats?.nay ?? 0}</Chip>
-              <Chip color={TOKENS.badge.pBg} onClick={() => setQuickPos("Present")}>Present {stats?.present ?? 0}</Chip>
-              <Chip color={TOKENS.badge.nvBg} onClick={() => setQuickPos("Not Voting")}>Not Voting {stats?.notVoting ?? 0}</Chip>
+            <div className="mt-2 flex gap-2 flex-wrap text-sm">
+              <Chip colorClass="bg-green-100" onClick={() => setQuickPos("Yea")}>Yea {stats?.yea ?? 0}</Chip>
+              <Chip colorClass="bg-red-100" onClick={() => setQuickPos("Nay")}>Nay {stats?.nay ?? 0}</Chip>
+              <Chip colorClass="bg-gray-100" onClick={() => setQuickPos("Present")}>Present {stats?.present ?? 0}</Chip>
+              <Chip colorClass="bg-amber-100" onClick={() => setQuickPos("Not Voting")}>Not Voting {stats?.notVoting ?? 0}</Chip>
             </div>
           </div>
         </header>
@@ -425,7 +302,7 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
       </div>
 
       {/* GROUPS (collapsible) */}
-      <div style={{ display: "grid", gap: 10 }}>
+      <div className="grid gap-2.5">
         {groups.map((g) => {
           const latestCounts = getCounts(g.latest || {});
           const isOpen = open.has(g.key);
@@ -435,140 +312,132 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
           return (
             <div
               key={g.key}
-              style={{
-                background: TOKENS.cardBg,
-                border: `1px solid ${TOKENS.border}`,
-                borderRadius: TOKENS.radius,
-                boxShadow: TOKENS.shadow,
-                overflow: "hidden",
-              }}
+              className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden"
             >
-              {/* Group header */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "28px minmax(260px,1fr) 340px 1fr 180px",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "10px 12px",
-                  borderBottom: `1px solid ${TOKENS.borderSubtle}`,
-                }}
-              >
-                <button
-                  onClick={() => {
-                        console.log('DEBUG navigation:', { billCongress: g.billCongress, billType: g.billType, billNumber: g.billNumber });
-                    const n = new Set(open);
-                    if (n.has(g.key)) n.delete(g.key); else n.add(g.key);
-                    setOpen(n);
-                  }}
-                  title={isOpen ? "Hide roll calls" : "Show roll calls"}
-                  style={chevBtn(isOpen)}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = isOpen ? "#DBEAFE" : "#F9FAFB";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = isOpen ? "#EFF6FF" : "#fff";
-                  }}
-                >
-                  {isOpen ? "▾" : "▸"}
-                </button>
+              {/* Group header - responsive: stack on mobile */}
+              <div className="flex flex-col md:flex-row md:items-center gap-3 p-3 border-b border-gray-100">
+                {/* Row 1 on mobile: expand button + title */}
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <button
+                    onClick={() => {
+                      console.log('DEBUG navigation:', { billCongress: g.billCongress, billType: g.billType, billNumber: g.billNumber });
+                      const n = new Set(open);
+                      if (n.has(g.key)) n.delete(g.key); else n.add(g.key);
+                      setOpen(n);
+                    }}
+                    title={isOpen ? "Hide roll calls" : "Show roll calls"}
+                    className={`h-8 w-8 rounded-lg border-2 cursor-pointer font-bold text-lg transition-colors flex-shrink-0 ${
+                      isOpen
+                        ? "border-blue-500 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                        : "border-gray-400 bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    {isOpen ? "▾" : "▸"}
+                  </button>
 
-                <div style={{ minWidth: 0 }}>
-                  {g.billType && g.billNumber ? (
-                    <button
-                      onClick={() => {
-                        console.log('DEBUG navigation:', { billCongress: g.billCongress, billType: g.billType, billNumber: g.billNumber });
-                        const url = new URL(window.location);
-                        url.searchParams.set('congress', g.billCongress);
-                        url.searchParams.set('billType', g.billType.toLowerCase());
-                        url.searchParams.set('billNumber', g.billNumber);
-                        url.searchParams.delete('member');
-                        window.location.href = url.toString();
-                      }}
-                      style={titleLink}
-                    >
-                      {g.title || `${g.billType} ${g.billNumber}`}
-                    </button>
-                  ) : (
-                    <span style={{ color: TOKENS.text }}>{g.title || "(Untitled bill)"}</span>
-                  )}
-                  <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    {g.billType && g.billNumber && (
-                      <span style={miniTag}>
-                        <BillLabel 
-                          legislationType={g.billType}
-                          legislationNumber={g.billNumber}
-                          subjectBillType={g.latest?.subjectBillType}
-                          subjectBillNumber={g.latest?.subjectBillNumber}
-                        />
-                      </span>
+                  <div className="min-w-0 flex-1">
+                    {g.billType && g.billNumber ? (
+                      <button
+                        onClick={() => {
+                          console.log('DEBUG navigation:', { billCongress: g.billCongress, billType: g.billType, billNumber: g.billNumber });
+                          const url = new URL(window.location);
+                          url.searchParams.set('congress', g.billCongress);
+                          url.searchParams.set('billType', g.billType.toLowerCase());
+                          url.searchParams.set('billNumber', g.billNumber);
+                          url.searchParams.delete('member');
+                          window.location.href = url.toString();
+                        }}
+                        className="border-0 bg-transparent p-0 cursor-pointer text-blue-700 underline text-[15px] font-semibold text-left"
+                      >
+                        {g.title || `${g.billType} ${g.billNumber}`}
+                      </button>
+                    ) : (
+                      <span className="text-gray-900">{g.title || "(Untitled bill)"}</span>
                     )}
-                    {g.latest?.started && (
-                      <span style={miniMuted}>{String(g.latest.started).slice(0,10)}</span>
-                    )}
+                    <div className="flex gap-2 mt-1.5 items-center flex-wrap">
+                      {g.billType && g.billNumber && (
+                        <span className="rounded-md px-1.5 py-0.5 text-[11px] bg-gray-100 text-gray-700 border border-gray-200">
+                          <BillLabel
+                            legislationType={g.billType}
+                            legislationNumber={g.billNumber}
+                            subjectBillType={g.latest?.subjectBillType}
+                            subjectBillNumber={g.latest?.subjectBillNumber}
+                          />
+                        </span>
+                      )}
+                      {g.latest?.started && (
+                        <span className="text-xs text-gray-500">{String(g.latest.started).slice(0, 10)}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                {/* Row 2 on mobile: result + counts */}
+                <div className="flex gap-2.5 items-center flex-wrap md:flex-nowrap">
                   <ResultBadge result={g.latest?.result} />
                   <Counts c={latestCounts} />
                 </div>
 
-                {/* tiny outcome spark (per chamber outcome) */}
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                  {g.votes.slice(0, 8).map((v) => (
-                    <span key={v.roll} title={`#${v.roll} • ${v.question || ""}`} style={{
-                      width: 9, height: 9, borderRadius: 2, display: "inline-block",
-                      background:
-                        classifyResult(v.result) === "passed" ? "#86efac" :
-                        classifyResult(v.result) === "failed" ? "#fca5a5" : "#d1d5db"
-                    }} />
-                  ))}
-                  {g.votes.length > 8 && (
-                    <span style={{ color: TOKENS.textMuted, fontSize: 12 }}>+{g.votes.length - 8}</span>
-                  )}
-                </div>
+                {/* Row 3 on mobile: outcome sparks + position */}
+                <div className="flex items-center justify-between gap-4 md:gap-2">
+                  {/* tiny outcome spark (per chamber outcome) */}
+                  <div className="flex gap-1 flex-wrap items-center">
+                    {g.votes.slice(0, 8).map((v) => (
+                      <span
+                        key={v.roll}
+                        title={`#${v.roll} • ${v.question || ""}`}
+                        className={`w-2 h-2 rounded-sm inline-block ${
+                          classifyResult(v.result) === "passed" ? "bg-green-300" :
+                          classifyResult(v.result) === "failed" ? "bg-red-300" : "bg-gray-300"
+                        }`}
+                      />
+                    ))}
+                    {g.votes.length > 8 && (
+                      <span className="text-gray-500 text-xs">+{g.votes.length - 8}</span>
+                    )}
+                  </div>
 
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
                   <PositionChip pos={latestMemberPos} />
                 </div>
               </div>
 
-              {/* Expanded inner table (member’s roll calls for this bill) */}
+              {/* Expanded inner table (member's roll calls for this bill) */}
               {isOpen && (
-                <div style={{ padding: 10, background: "#FBFCFE" }}>
-                  <div style={{ overflowX: "auto" }}>
-                    <table cellPadding={0} style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
-                      <thead style={{ position: "sticky", top: 0, background: "#FBFCFE", zIndex: 1 }}>
+                <div className="p-2.5 bg-slate-50">
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead className="sticky top-0 bg-slate-50 z-[1]">
                         <tr>
                           {["Roll", "Question", "Chamber Result", "Member Vote", "Date", ""].map((h, i) => (
-                            <th key={i} align={i === 5 ? "right" : "left"} style={headCell}>{h}</th>
+                            <th
+                              key={i}
+                              className={`text-left font-bold text-xs text-gray-700 px-3 py-2.5 border-b border-gray-200 ${i === 5 ? "text-right" : ""}`}
+                            >
+                              {h}
+                            </th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {g.votes.map((v, idx) => {
-                          const zebra = idx % 2 === 1 ? { background: "#F7F9FD" } : null;
-                          return (
-                            <tr key={v.roll} style={{ borderTop: `1px solid ${TOKENS.borderSubtle}`, ...zebra }}>
-                              <td style={cell}>#{v.roll}</td>
-                              <td style={{ ...cell, minWidth: 280 }}>{v.question || "—"}</td>
-                              <td style={cell}><ResultBadge result={v.result} /></td>
-                              <td style={cell}><PositionChip pos={v.position} /></td>
-                              <td style={{ ...cell, whiteSpace: "nowrap" }}>{String(v.started || "").slice(0,10)}</td>
-                              <td style={{ ...cell, textAlign: "right" }}>
-                                {onOpenRoll ? (
-                                  <button
-                                    onClick={() => onOpenRoll({ congress, session: v.session ?? session, roll: v.roll })}
-                                    style={rowBtn}
-                                  >
-                                    Open roll
-                                  </button>
-                                ) : null}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        {g.votes.map((v, idx) => (
+                          <tr key={v.roll} className={`border-t border-gray-100 ${idx % 2 === 1 ? "bg-slate-100/50" : ""}`}>
+                            <td className="px-3 py-2.5 text-gray-900 text-sm">#{v.roll}</td>
+                            <td className="px-3 py-2.5 text-gray-900 text-sm min-w-[280px]">{v.question || "—"}</td>
+                            <td className="px-3 py-2.5 text-sm"><ResultBadge result={v.result} /></td>
+                            <td className="px-3 py-2.5 text-sm"><PositionChip pos={v.position} /></td>
+                            <td className="px-3 py-2.5 text-gray-900 text-sm whitespace-nowrap">{String(v.started || "").slice(0, 10)}</td>
+                            <td className="px-3 py-2.5 text-sm text-right">
+                              {onOpenRoll ? (
+                                <button
+                                  onClick={() => onOpenRoll({ congress, session: v.session ?? session, roll: v.roll })}
+                                  className="border border-gray-200 bg-white text-gray-900 rounded-lg px-2.5 py-1.5 cursor-pointer font-semibold hover:bg-gray-50"
+                                >
+                                  Open roll
+                                </button>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
@@ -583,20 +452,12 @@ export default function MemberPage({ bioguideId, congress = 119, session = 1, on
 }
 
 /* ================= small bits ================= */
-function Chip({ children, color = "#eef2ff", onClick, title }) {
+function Chip({ children, colorClass = "bg-blue-50", onClick, title }) {
   return (
     <button
       title={title}
       onClick={onClick}
-      style={{
-        border: `1px solid ${TOKENS.border}`,
-        background: color,
-        borderRadius: 999,
-        padding: "4px 10px",
-        cursor: onClick ? "pointer" : "default",
-        fontWeight: 700,
-        fontSize: 12,
-      }}
+      className={`border border-gray-200 rounded-full px-2.5 py-1 font-bold text-xs ${colorClass} ${onClick ? "cursor-pointer hover:opacity-80" : "cursor-default"}`}
     >
       {children}
     </button>
