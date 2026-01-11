@@ -19,13 +19,7 @@ dependencies = [
 ]
 
 [tool.fastapi]
-entrypoint = "main:app"
-
-[tool.setuptools]
-package-dir = {"" = "backend"}
-
-[tool.setuptools.packages.find]
-where = ["backend"]
+entrypoint = "backend.main:app"
 
 [build-system]
 requires = ["setuptools>=61.0"]
