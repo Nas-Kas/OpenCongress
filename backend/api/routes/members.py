@@ -77,8 +77,54 @@ async def search_members(
     """Search for members by name, bioguide ID, state, or party."""
     if not q.strip():
         return []
-    
+
     member_repo = MemberRepository(pool)
     member_service = MemberService(member_repo)
-    
+
     return await member_service.search_members(q, limit)
+
+
+@router.get("/members")
+async def get_members_list(
+    congress: Optional[int] = Query(None, description="Filter by congress (e.g., 119)"),
+    party: Optional[str] = Query(None, description="Filter by party (D, R, I)"),
+    state: Optional[str] = Query(None, description="Filter by state (e.g., CA, TX)"),
+    limit: int = Query(500, ge=1, le=1000),
+    pool: asyncpg.Pool = Depends(get_db_pool)
+):
+    """Get list of members with optional filters."""
+    member_repo = MemberRepository(pool)
+
+    members = await member_repo.get_members_list(
+        congress=congress,
+        party=party.upper() if party else None,
+        state=state.upper() if state else None,
+        limit=limit
+    )
+
+    return {
+        "members": members,
+        "count": len(members),
+        "filters": {
+            "congress": congress,
+            "party": party.upper() if party else None,
+            "state": state.upper() if state else None
+        }
+    }
+
+
+@router.get("/members/filters")
+async def get_member_filters(
+    pool: asyncpg.Pool = Depends(get_db_pool)
+):
+    """Get available filter options for members (congresses, states)."""
+    member_repo = MemberRepository(pool)
+
+    congresses = await member_repo.get_available_congresses()
+    states = await member_repo.get_available_states()
+
+    return {
+        "congresses": congresses,
+        "states": states,
+        "parties": ["D", "R", "I"]  # Standard parties
+    }

@@ -117,6 +117,98 @@ class MemberRepository:
         )
         return [dict(r) for r in rows]
 
+    async def get_members_list(
+        self,
+        congress: Optional[int] = None,
+        party: Optional[str] = None,
+        state: Optional[str] = None,
+        limit: int = 500,
+        conn=None
+    ) -> List[dict]:
+        """Get list of members with optional filters for congress, party, and state."""
+        if conn:
+            return await self._get_members_list_exec(conn, congress, party, state, limit)
+        async with self.pool.acquire() as new_conn:
+            return await self._get_members_list_exec(new_conn, congress, party, state, limit)
+
+    async def _get_members_list_exec(self, conn, congress, party, state, limit):
+        # Build dynamic query based on filters
+        if congress:
+            # Filter by members who have votes in this congress
+            query = """
+                SELECT DISTINCT
+                    m.bioguide_id AS "bioguideId",
+                    m.name,
+                    m.party,
+                    m.state,
+                    m.image_url AS "imageUrl"
+                FROM members m
+                JOIN house_vote_members hvm ON m.bioguide_id = hvm.bioguide_id
+                WHERE hvm.congress = $1
+            """
+            params = [congress]
+            param_idx = 2
+        else:
+            # No congress filter - return all members
+            query = """
+                SELECT
+                    bioguide_id AS "bioguideId",
+                    name,
+                    party,
+                    state,
+                    image_url AS "imageUrl"
+                FROM members
+                WHERE 1=1
+            """
+            params = []
+            param_idx = 1
+
+        # Add party filter
+        if party:
+            query += f" AND m.party = ${param_idx}" if congress else f" AND party = ${param_idx}"
+            params.append(party.upper())
+            param_idx += 1
+
+        # Add state filter
+        if state:
+            query += f" AND m.state = ${param_idx}" if congress else f" AND state = ${param_idx}"
+            params.append(state.upper())
+            param_idx += 1
+
+        # Order and limit
+        query += " ORDER BY name ASC"
+        query += f" LIMIT ${param_idx}"
+        params.append(limit)
+
+        rows = await conn.fetch(query, *params)
+        return [dict(r) for r in rows]
+
+    async def get_available_congresses(self, conn=None) -> List[int]:
+        """Get list of congresses that have vote data."""
+        if conn:
+            return await self._get_congresses_exec(conn)
+        async with self.pool.acquire() as new_conn:
+            return await self._get_congresses_exec(new_conn)
+
+    async def _get_congresses_exec(self, conn):
+        rows = await conn.fetch(
+            "SELECT DISTINCT congress FROM house_vote_members ORDER BY congress DESC"
+        )
+        return [r['congress'] for r in rows]
+
+    async def get_available_states(self, conn=None) -> List[str]:
+        """Get list of states that have members."""
+        if conn:
+            return await self._get_states_exec(conn)
+        async with self.pool.acquire() as new_conn:
+            return await self._get_states_exec(new_conn)
+
+    async def _get_states_exec(self, conn):
+        rows = await conn.fetch(
+            "SELECT DISTINCT state FROM members WHERE state IS NOT NULL ORDER BY state ASC"
+        )
+        return [r['state'] for r in rows]
+
     async def get_member_most_recent_votes(self, bioguide_id: str, limit: int = 1, conn=None) -> List[dict]:
         if conn:
             return await self._get_recent_votes_exec(conn, bioguide_id, limit)

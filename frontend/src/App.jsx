@@ -3,6 +3,7 @@ import VotesTable from "./VotesTable";
 import VotedBillsTable from "./VotedBillsTable";
 import MemberPage from "./MemberPage";
 import MemberSearch from "./MemberSearch";
+import MemberGrid from "./MemberGrid";
 import BillPage from "./BillPage";
 import BillsWithoutVotes from "./BillsWithoutVotes";
 import { LoadingSpinner, ErrorMessage } from "./components";
@@ -278,52 +279,13 @@ export default function App() {
           <div className="mb-4">
             <h1 className="m-0 mb-2 text-xl sm:text-2xl font-bold">👥 Members of Congress</h1>
             <p className="m-0 text-gray-500 text-xs sm:text-sm leading-relaxed">
-              Search for representatives to view their voting records and positions.
+              Browse representatives and view their voting records.
             </p>
           </div>
-          
-          <div className="mb-6">
-            <MemberSearch
-              onSelect={(id) => id && setSelectedMember(id.toUpperCase())}
-            />
-          </div>
 
-          <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2">
-            <div className="bg-white border border-gray-300 rounded-lg p-3 sm:p-4">
-              <h3 className="text-base sm:text-lg font-bold mb-2 sm:mb-3">💡 How to Use</h3>
-              <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm text-gray-700">
-                <li>• Search by name, state (e.g., "CA"), or party (D/R) above</li>
-                <li>• Click on a member to see their complete voting history</li>
-                <li>• View how they voted on specific bills and resolutions</li>
-                <li>• Track their positions across different legislative sessions</li>
-              </ul>
-            </div>
-
-            <div className="bg-white border border-gray-300 rounded-lg p-3 sm:p-4">
-              <h3 className="text-base sm:text-lg font-bold mb-2 sm:mb-3">📊 Quick Stats</h3>
-              <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm text-gray-700">
-                <div className="flex justify-between">
-                  <span>House Members:</span>
-                  <strong>435</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span>Current Congress:</span>
-                  <strong>119th (2025-2027)</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span>Voting Records:</span>
-                  <strong>Available</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 sm:mt-6 bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
-            <h3 className="text-xs sm:text-sm font-bold text-blue-900 mb-1.5 sm:mb-2">💡 Tip</h3>
-            <p className="text-xs sm:text-sm text-blue-800">
-              You can also access member pages directly from the Votes tab by clicking on any representative's name in the voting tables.
-            </p>
-          </div>
+          <MemberGrid
+            onSelectMember={(id) => id && setSelectedMember(id.toUpperCase())}
+          />
         </div>
       )}
 

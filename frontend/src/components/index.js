@@ -4,4 +4,5 @@ export { ErrorMessage } from './common/ErrorMessage';
 export { VoteButton } from './ui/VoteButton';
 export { ResultBadge } from './ui/ResultBadge';
 export { BillCard } from './ui/BillCard';
+export { MemberCard } from './ui/MemberCard';
 export { Breadcrumb } from './ui/Breadcrumb';
