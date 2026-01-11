@@ -10,7 +10,7 @@ import requests
 from typing import List, Dict, Optional
 import tempfile
 
-from streaming_pdf_processor import StreamingPDFProcessor
+from backend.streaming_pdf_processor import StreamingPDFProcessor
 
 
 class BillRAGEmbedder:

@@ -8,12 +8,12 @@ import os
 import re
 from dotenv import load_dotenv
 
-from services.bill_service import BillService
-from repositories.bill_repository import BillRepository
-from api.dependencies import get_db_pool
-from bill_text_scraper import BillTextScraper
-from gemini_bill_summarizer import GeminiBillSummarizer
-from bill_rag_embedder import BillRAGEmbedder
+from backend.services.bill_service import BillService
+from backend.repositories.bill_repository import BillRepository
+from backend.api.dependencies import get_db_pool
+from backend.bill_text_scraper import BillTextScraper
+from backend.gemini_bill_summarizer import GeminiBillSummarizer
+from backend.bill_rag_embedder import BillRAGEmbedder
 
 # Load environment variables
 load_dotenv()

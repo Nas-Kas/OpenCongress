@@ -1,6 +1,6 @@
 """Business logic for member operations with optimized connection handling."""
 from typing import Optional, List
-from utils.formatters import normalize_position, to_iso
+from backend.utils.formatters import normalize_position, to_iso
 
 class MemberService:
     def __init__(self, member_repo):

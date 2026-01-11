@@ -11,7 +11,7 @@ import os
 from dotenv import load_dotenv
 
 # Import route modules
-from api.routes import votes, members, bills
+from backend.api.routes import votes, members, bills
 
 load_dotenv()
 

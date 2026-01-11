@@ -7,8 +7,8 @@ import asyncio
 from typing import Optional
 from datetime import datetime
 
-from bill_rag_embedder import BillRAGEmbedder
-from hierarchical_summarizer import HierarchicalSummarizer
+from backend.bill_rag_embedder import BillRAGEmbedder
+from backend.hierarchical_summarizer import HierarchicalSummarizer
 
 
 class EmbeddingJobManager:

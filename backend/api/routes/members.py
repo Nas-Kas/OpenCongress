@@ -3,9 +3,9 @@ from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import Optional
 import asyncpg
 
-from services.member_service import MemberService
-from repositories.member_repository import MemberRepository
-from api.dependencies import get_db_pool
+from backend.services.member_service import MemberService
+from backend.repositories.member_repository import MemberRepository
+from backend.api.dependencies import get_db_pool
 
 
 router = APIRouter(tags=["members"])

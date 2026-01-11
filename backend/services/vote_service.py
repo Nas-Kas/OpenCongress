@@ -1,7 +1,7 @@
 """Business logic for vote operations."""
 from typing import Optional, List
-from repositories.vote_repository import VoteRepository
-from utils.formatters import normalize_position, to_iso
+from backend.repositories.vote_repository import VoteRepository
+from backend.utils.formatters import normalize_position, to_iso
 
 
 class VoteService:

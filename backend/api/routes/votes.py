@@ -3,11 +3,11 @@ from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import Optional
 import asyncpg
 
-from services.vote_service import VoteService
-from services.bill_service import BillService
-from repositories.vote_repository import VoteRepository
-from repositories.bill_repository import BillRepository
-from api.dependencies import get_db_pool
+from backend.services.vote_service import VoteService
+from backend.services.bill_service import BillService
+from backend.repositories.vote_repository import VoteRepository
+from backend.repositories.bill_repository import BillRepository
+from backend.api.dependencies import get_db_pool
 
 
 router = APIRouter(prefix="/house", tags=["votes"])
