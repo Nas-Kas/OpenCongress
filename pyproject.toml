@@ -4,6 +4,18 @@ version = "2.0.0"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]",
+    "httpx",
+    "python-dotenv",
+    "asyncpg",
+    "pydantic",
+    "beautifulsoup4",
+    "lxml",
+    "pdfplumber",
+    "PyMuPDF",
+    "openai",
+    "requests",
+    "google-genai",
+    "pgvector",
 ]
 
 [tool.fastapi]
