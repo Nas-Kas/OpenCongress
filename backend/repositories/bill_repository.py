@@ -40,12 +40,37 @@ class BillRepository:
     async def _get_versions_exec(self, conn, congress, bill_type, bill_number):
         rows = await conn.fetch(
             """
-            SELECT 
-                version_type AS "versionType", 
+            SELECT
+                version_type AS "versionType",
                 url
             FROM bill_text_versions
             WHERE congress=$1 AND bill_type=$2 AND bill_number=$3
-            ORDER BY version_type DESC
+            ORDER BY
+                CASE version_type
+                    -- Final enacted versions (highest priority)
+                    WHEN 'Public Law' THEN 1
+                    WHEN 'Enrolled Bill' THEN 2
+                    -- Conference versions
+                    WHEN 'Conference Report' THEN 3
+                    -- Chamber-passed versions
+                    WHEN 'Engrossed in Senate' THEN 4
+                    WHEN 'Engrossed in House' THEN 5
+                    WHEN 'Engrossed Amendment Senate' THEN 6
+                    WHEN 'Engrossed Amendment House' THEN 7
+                    -- Committee-reported versions
+                    WHEN 'Reported in Senate' THEN 8
+                    WHEN 'Reported in House' THEN 9
+                    -- Placed on calendar
+                    WHEN 'Placed on Calendar Senate' THEN 10
+                    WHEN 'Placed on Calendar House' THEN 11
+                    -- Referred versions
+                    WHEN 'Referred in Senate' THEN 12
+                    WHEN 'Referred in House' THEN 13
+                    -- Introduced versions (lowest priority - often placeholder for vehicle bills)
+                    WHEN 'Introduced in Senate' THEN 14
+                    WHEN 'Introduced in House' THEN 15
+                    ELSE 16
+                END
             """,
             congress, bill_type.lower(), bill_number
         )

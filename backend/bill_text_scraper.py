@@ -108,25 +108,59 @@ class BillTextScraper:
             print(f"PDF extraction failed: {e}")
             return None
 
+    # Priority order for bill text versions (lower = more authoritative)
+    VERSION_PRIORITY = {
+        'Public Law': 1,
+        'Enrolled Bill': 2,
+        'Conference Report': 3,
+        'Engrossed in Senate': 4,
+        'Engrossed in House': 5,
+        'Engrossed Amendment Senate': 6,
+        'Engrossed Amendment House': 7,
+        'Reported in Senate': 8,
+        'Reported in House': 9,
+        'Placed on Calendar Senate': 10,
+        'Placed on Calendar House': 11,
+        'Referred in Senate': 12,
+        'Referred in House': 13,
+        'Introduced in Senate': 14,
+        'Introduced in House': 15,
+    }
+
+    def _get_best_version(self, text_versions: list) -> Optional[Dict[str, Any]]:
+        """Select the most authoritative bill text version (enacted > engrossed > introduced)."""
+        if not text_versions:
+            return None
+
+        def version_priority(v):
+            version_type = v.get('type', '')
+            return self.VERSION_PRIORITY.get(version_type, 99)
+
+        # Sort by priority and return the best one
+        sorted_versions = sorted(text_versions, key=version_priority)
+        return sorted_versions[0]
+
     def get_bill_text_from_api(self, congress: int, bill_type: str, bill_number: str) -> Optional[Dict[str, Any]]:
         """Try to get bill text from Congress API first"""
         if not self.api_key:
             return None
-            
+
         try:
             url = f"https://api.congress.gov/v3/bill/{congress}/{bill_type}/{bill_number}/text"
             params = {'api_key': self.api_key, 'format': 'json'}
-            
+
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
-            
+
             data = response.json()
             text_versions = data.get('textVersions', [])
-            
+
             if text_versions:
-                # Get the most recent text version
-                latest_version = text_versions[0]
-                formats = latest_version.get('formats', [])
+                # Get the most authoritative text version (not just first/most recent)
+                best_version = self._get_best_version(text_versions)
+                if not best_version:
+                    return None
+                formats = best_version.get('formats', [])
                 
                 # Look for PDF format first (most complete), then HTML
                 pdf_url = None
@@ -146,18 +180,18 @@ class BillTextScraper:
                         cleaned_text = self.clean_bill_text(pdf_text)
                         return {
                             'url': pdf_url,
-                            'title': latest_version.get('type', ''),
+                            'title': best_version.get('type', ''),
                             'text': cleaned_text,
                             'length': len(cleaned_text),
                             'scraped_at': time.time(),
                             'source': 'api_pdf'
                         }
-                
+
                 # Fallback to HTML
                 if html_url:
                     text_response = requests.get(html_url, timeout=30)
                     text_response.raise_for_status()
-                    
+
                     # Parse HTML content
                     text_content = text_response.text
                     if text_content.startswith('<html>'):
@@ -168,13 +202,13 @@ class BillTextScraper:
                             text_content = pre_tag.get_text()
                         else:
                             text_content = soup.get_text()
-                    
+
                     # Clean the text
                     text_content = self.clean_bill_text(text_content)
-                    
+
                     return {
                         'url': html_url,
-                        'title': latest_version.get('type', ''),
+                        'title': best_version.get('type', ''),
                         'text': text_content,
                         'length': len(text_content),
                         'scraped_at': time.time(),
