@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+httpx
+python-dotenv
+asyncpg
+pydantic
+beautifulsoup4
+lxml
+pdfplumber
+PyMuPDF
+openai
+requests
+google-genai
+pgvector

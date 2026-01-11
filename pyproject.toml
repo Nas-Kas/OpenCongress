@@ -1,0 +1,8 @@
+[project]
+name = "opencongress"
+version = "2.0.0"
+requires-python = ">=3.13"
+
+[tool.fastapi]
+entrypoint = "backend.main:app"
+requirements = "backend/requirements.txt"
